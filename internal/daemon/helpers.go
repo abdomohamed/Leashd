@@ -26,18 +26,24 @@ func commString(comm [16]byte) string {
 }
 
 func uint32ToIPStr(n uint32) string {
+	// n is a host-endian (little-endian on x86) copy of a network-byte-order
+	// (big-endian) uint32 read via bpf_probe_read_user.
+	// LittleEndian decomposition restores the original network-order bytes,
+	// which are the canonical IPv4 octets [a, b, c, d].
 	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, n)
+	binary.LittleEndian.PutUint32(b, n)
 	return fmt.Sprintf("%d.%d.%d.%d", b[0], b[1], b[2], b[3])
 }
 
 func uint32ToNetIP(n uint32) net.IP {
+	// Same byte-order reasoning as uint32ToIPStr.
 	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, n)
+	binary.LittleEndian.PutUint32(b, n)
 	return net.IP(b)
 }
 
 func networkToHostPort(port uint16) uint16 {
-	b := [2]byte{byte(port >> 8), byte(port)}
-	return binary.BigEndian.Uint16(b[:])
+	// port was read from sin_port (network/big-endian) into a host-endian uint16.
+	// Swap bytes to convert back to host byte order (ntohs equivalent).
+	return (port >> 8) | (port << 8)
 }
