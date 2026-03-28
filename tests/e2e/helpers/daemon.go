@@ -4,6 +4,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -26,6 +27,9 @@ type LeashSession struct {
 	SockPath string
 	// RulesPath is the path to rules.yaml.
 	RulesPath string
+	// CgroupPath is the cgroupv2 directory leashd created for this session.
+	// Populated via IPC status query after the daemon starts.
+	CgroupPath string
 
 	cmd *exec.Cmd
 }
@@ -80,6 +84,12 @@ func StartLeashd(t *testing.T, rulesYAML string, wrappedCmd ...string) *LeashSes
 	if err := WaitForSocket(sockPath, 5*time.Second); err != nil {
 		_ = cmd.Process.Kill()
 		t.Fatalf("leashd did not create socket: %v", err)
+	}
+
+	// Query the daemon for its cgroup path so SpawnConnector can place
+	// the connector process inside the managed cgroup.
+	if status, err := querySessionStatus(sockPath); err == nil {
+		sess.CgroupPath = status.CgroupPath
 	}
 
 	t.Cleanup(func() { sess.Stop(t) })
@@ -162,6 +172,24 @@ func LeashdBinary() string {
 		dir = parent
 	}
 	return "leashd" // last resort — will fail with a clear error
+}
+
+// querySessionStatus dials the IPC socket and returns the daemon status.
+func querySessionStatus(sockPath string) (*ipc.StatusResponse, error) {
+	conn, err := net.DialTimeout("unix", sockPath, 2*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	if err := json.NewEncoder(conn).Encode(ipc.Request{Cmd: ipc.CmdStatus}); err != nil {
+		return nil, err
+	}
+	var resp ipc.StatusResponse
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // RunLeashd runs a one-shot leashd command (not run, e.g. "status") in the

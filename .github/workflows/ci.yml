@@ -58,10 +58,19 @@ jobs:
       - name: Smoke test — verify leashd binary starts and loads BPF
         run: |
           set -euo pipefail
+          SMOKE_DIR=$(mktemp -d)
+          cat > "$SMOKE_DIR/rules.yaml" <<'EOF'
+          version: "1"
+          project:
+            name: smoke-test
+          defaults:
+            action: warn
+            log: true
+          EOF
           echo "=== leashd smoke test ==="
-          sudo env PATH="$PATH" bin/leashd run --no-daemon echo "BPF-less start OK" 2>&1
+          sudo env PATH="$PATH" bin/leashd run --no-daemon --dir "$SMOKE_DIR" echo "BPF-less start OK" 2>&1
           echo "=== BPF load test ==="
-          sudo env PATH="$PATH" bin/leashd run echo "BPF load OK" 2>&1 || {
+          sudo env PATH="$PATH" bin/leashd run --dir "$SMOKE_DIR" echo "BPF load OK" 2>&1 || {
             echo "FAIL: leashd BPF load failed (see stderr above)"; exit 1
           }
 

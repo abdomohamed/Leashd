@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -22,14 +23,27 @@ func ConnectTCP(addr string) error {
 	return nil
 }
 
-// SpawnConnector runs the connector binary inside the session's cgroup
-// (by virtue of it being a child of the leashd-managed process) and
-// returns the connection error (nil = success).
+// SpawnConnector runs the connector binary inside the leashd-managed cgroup
+// so that BPF kprobe and cgroup/skb enforcement applies to the connection.
+// It uses SysProcAttr.CgroupFD to place the process at fork time, mirroring
+// how leashd itself places the wrapped child into the cgroup.
 func SpawnConnector(t *testing.T, sess *LeashSession, addr string) error {
 	t.Helper()
 	connBin := ConnectorBinary(t)
 	cmd := exec.Command(connBin, "--addr", addr, "--timeout", "3s")
 	cmd.Dir = sess.Dir
+
+	if sess.CgroupPath != "" {
+		cgroupFD, err := os.Open(sess.CgroupPath)
+		if err == nil {
+			defer cgroupFD.Close()
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				CgroupFD:    int(cgroupFD.Fd()),
+				UseCgroupFD: true,
+			}
+		}
+	}
+
 	out, err := cmd.CombinedOutput()
 	t.Logf("connector output: %s", out)
 	return err
