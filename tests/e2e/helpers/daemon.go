@@ -68,9 +68,12 @@ func StartLeashd(t *testing.T, rulesYAML string, wrappedCmd ...string) *LeashSes
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	t.Logf("starting leashd: %s %v", leashd, args)
+
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start leashd: %v", err)
 	}
+	t.Logf("leashd started (pid=%d)", cmd.Process.Pid)
 
 	sess := &LeashSession{
 		Dir:       dir,
@@ -85,11 +88,17 @@ func StartLeashd(t *testing.T, rulesYAML string, wrappedCmd ...string) *LeashSes
 		_ = cmd.Process.Kill()
 		t.Fatalf("leashd did not create socket: %v", err)
 	}
+	t.Logf("IPC socket appeared: %s", sockPath)
 
 	// Query the daemon for its cgroup path so SpawnConnector can place
 	// the connector process inside the managed cgroup.
-	if status, err := querySessionStatus(sockPath); err == nil {
+	if status, err := querySessionStatus(sockPath); err == nil && status.CgroupPath != "" {
 		sess.CgroupPath = status.CgroupPath
+		t.Logf("cgroup path (via IPC): %s", sess.CgroupPath)
+	} else {
+		// Fallback: derive from PID. Cgroup name is "leashd-<PID>" (see cgroup.Manager).
+		sess.CgroupPath = fmt.Sprintf("/sys/fs/cgroup/leashd/leashd-%d", cmd.Process.Pid)
+		t.Logf("cgroup path (fallback from PID): %s (IPC err: %v)", sess.CgroupPath, err)
 	}
 
 	t.Cleanup(func() { sess.Stop(t) })

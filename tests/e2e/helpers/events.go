@@ -53,6 +53,15 @@ func WaitForEvent(t *testing.T, logPath string, match func(Event) bool, timeout 
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+	// Dump whatever IS in the log to help diagnose.
+	if events := ReadEvents(t, logPath); len(events) > 0 {
+		t.Logf("events.jsonl has %d event(s) but none matched; last events:", len(events))
+		for i, ev := range events {
+			t.Logf("  [%d] verdict=%s dst_ip=%s pid=%d comm=%s", i, ev.Verdict, ev.DstIP, ev.PID, ev.Comm)
+		}
+	} else {
+		t.Logf("events.jsonl is empty (no events received from BPF ring buffer)")
+	}
 	t.Fatalf("no matching event appeared in %s within %s", logPath, timeout)
 	return Event{}
 }
