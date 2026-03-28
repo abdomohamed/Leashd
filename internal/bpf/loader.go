@@ -124,7 +124,7 @@ func (l *Loader) Close() {
 		_ = l.reader.Close()
 	}
 	if l.objs != nil {
-		l.objs.Close()
+		_ = l.objs.Close()
 	}
 	l.logger.Info("eBPF programs and maps unloaded")
 }

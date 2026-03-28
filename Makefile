@@ -18,7 +18,11 @@ vmlinux:
 
 generate: $(VMLINUX)
 	@echo "==> Running go generate (bpf2go)..."
-	go generate ./internal/bpf/...
+	@# Remove the stub — bpf2go will generate the real leashd_bpfel.go / leashd_bpfeb.go.
+	@# If go generate fails we restore the stub so the repo remains compilable.
+	@rm -f internal/bpf/objects.go
+	go generate ./internal/bpf/... || \
+	  { git checkout -- internal/bpf/objects.go 2>/dev/null || true; exit 1; }
 
 build: generate
 	@echo "==> Building leashd..."
