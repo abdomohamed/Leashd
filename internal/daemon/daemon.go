@@ -266,13 +266,15 @@ func (d *Daemon) runEventConsumer() {
 	}
 	defer func() { _ = reader.Close() }()
 
-	for {
-		select {
-		case <-d.ctx.Done():
-			return
-		default:
-		}
+	// reader.Read() blocks until an event arrives or the reader is closed.
+	// When the context is cancelled we must close the reader to unblock it;
+	// otherwise wg.Wait() in Stop() will deadlock.
+	go func() {
+		<-d.ctx.Done()
+		_ = reader.Close()
+	}()
 
+	for {
 		record, err := reader.Read()
 		if err != nil {
 			if d.ctx.Err() != nil {
