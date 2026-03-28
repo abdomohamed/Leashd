@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"sync"
@@ -90,7 +91,6 @@ func New(
 		cancel:     cancel,
 	}
 	srv.SetStatusFunc(d.statusSnapshot)
-	srv.SetStreamCh(d.enrichCh)
 	return d, nil
 }
 
@@ -355,6 +355,46 @@ func (d *Daemon) runAlertDispatcher() {
 			return
 		case evt := <-d.enrichCh:
 			d.dispatcher.Dispatch(d.ctx, evt)
+			d.publishToStream(evt)
 		}
 	}
+}
+
+// publishToStream serializes evt as a logEvent JSON line and publishes it
+// to all active IPC stream subscribers.
+func (d *Daemon) publishToStream(evt EnrichedEvent) {
+	entry := logEvent{
+		Timestamp:   evt.Timestamp,
+		PID:         evt.PID,
+		Comm:        commString(evt.Comm),
+		DstIP:       evt.DstIPStr,
+		DstPort:     networkToHostPort(evt.DstPort),
+		Protocol:    evt.Protocol,
+		ReverseDNS:  evt.ReverseDNS,
+		MatchedRule: evt.MatchedRule,
+		Verdict:     verdictName(evt.FinalVerdict),
+		Meta: logMeta{
+			CgroupID:       evt.CgroupID,
+			CgroupPath:     evt.CgroupPath,
+			KernelVerdict:  verdictName(evt.Verdict),
+			EngineOverride: evt.Verdict != evt.FinalVerdict,
+			PolicyVersion:  evt.PolicyVer,
+		},
+	}
+
+	data, err := marshalJSONLine(entry)
+	if err != nil {
+		d.logger.Error("marshal stream event", "error", err)
+		return
+	}
+	d.ipcServer.Publish(data)
+}
+
+// marshalJSONLine returns JSON-encoded v with a trailing newline.
+func marshalJSONLine(v any) ([]byte, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
 }

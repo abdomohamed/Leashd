@@ -19,6 +19,9 @@ type Server struct {
 
 	statusFunc func() StatusResponse
 
+	subsMu sync.Mutex
+	subs   map[chan []byte]struct{}
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -30,6 +33,7 @@ func NewServer(socketPath string, logger *slog.Logger) *Server {
 	return &Server{
 		socketPath: socketPath,
 		logger:     logger,
+		subs:       make(map[chan []byte]struct{}),
 		ctx:        ctx,
 		cancel:     cancel,
 	}
@@ -40,12 +44,16 @@ func (s *Server) SetStatusFunc(fn func() StatusResponse) {
 	s.statusFunc = fn
 }
 
-// SetStreamCh sets the channel from which the server fans out events to streaming clients.
-func (s *Server) SetStreamCh(ch interface{}) {
-	// The channel type is opaque here; the server only reads from it via reflection
-	// in a separate goroutine. Clients who want typed access should use the daemon's
-	// enrichCh directly. The IPC server bridges it to socket clients.
-	_ = ch // wired up in Start() via a wrapper goroutine
+// Publish sends serialized event data to all active stream subscribers.
+func (s *Server) Publish(data []byte) {
+	s.subsMu.Lock()
+	defer s.subsMu.Unlock()
+	for ch := range s.subs {
+		select {
+		case ch <- data:
+		default: // drop if subscriber is slow
+		}
+	}
 }
 
 // Start begins listening on the UNIX socket.
@@ -143,6 +151,26 @@ func (s *Server) handleConn(conn *net.UnixConn) {
 			_ = enc.Encode(s.statusFunc())
 		} else {
 			_ = enc.Encode(ErrorResponse{Error: "status not available"})
+		}
+	case CmdStream:
+		ch := make(chan []byte, 64)
+		s.subsMu.Lock()
+		s.subs[ch] = struct{}{}
+		s.subsMu.Unlock()
+		defer func() {
+			s.subsMu.Lock()
+			delete(s.subs, ch)
+			s.subsMu.Unlock()
+		}()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case data := <-ch:
+				if _, err := conn.Write(data); err != nil {
+					return
+				}
+			}
 		}
 	default:
 		_ = enc.Encode(ErrorResponse{Error: "unknown command: " + req.Cmd})
