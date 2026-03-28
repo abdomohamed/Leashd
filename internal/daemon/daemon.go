@@ -159,7 +159,7 @@ func (d *Daemon) runRulesWatcher() {
 		d.logger.Error("create rules watcher", "error", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 	if err := watcher.Add(d.cfgPath); err != nil {
 		d.logger.Error("watch rules file", "path", d.cfgPath, "error", err)
 		return
@@ -196,9 +196,7 @@ func (d *Daemon) reloadPolicy() {
 	// Collect all non-wildcard domains for resolution.
 	var domains []string
 	for _, rule := range cfg.Rules {
-		for _, dom := range rule.Domains {
-			domains = append(domains, dom)
-		}
+		domains = append(domains, rule.Domains...)
 	}
 
 	resolvedIPs := make(map[string][]net.IP)
@@ -266,7 +264,7 @@ func (d *Daemon) runEventConsumer() {
 		d.logger.Error("create ring buffer reader", "error", err)
 		return
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	for {
 		select {

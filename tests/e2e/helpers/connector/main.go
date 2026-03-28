@@ -26,7 +26,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "connector: dial %s failed: %v\n", *addr, err)
 		os.Exit(1)
 	}
-	conn.Close()
+	_ = conn.Close()
 	fmt.Printf("connector: connected to %s\n", *addr)
 	os.Exit(0)
 }

@@ -26,7 +26,7 @@ detecting and blocking unexpected outbound connections from your processes.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		level := slog.LevelInfo
+		var level slog.Level
 		switch flagLogLevel {
 		case "debug":
 			level = slog.LevelDebug

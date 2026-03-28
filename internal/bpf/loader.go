@@ -87,7 +87,7 @@ func (l *Loader) AttachCgroup(cgroupPath string) (link.Link, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open cgroup dir %s: %w", cgroupPath, err)
 	}
-	defer cgroupFD.Close()
+	defer func() { _ = cgroupFD.Close() }()
 
 	lnk, err := link.AttachCgroup(link.CgroupOptions{
 		Path:    cgroupPath,

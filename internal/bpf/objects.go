@@ -35,13 +35,13 @@ type LeashdMaps struct {
 
 func (m *LeashdMaps) Close() {
 	if m.PolicyMap != nil {
-		m.PolicyMap.Close()
+		_ = m.PolicyMap.Close()
 	}
 	if m.TrackedCgroups != nil {
-		m.TrackedCgroups.Close()
+		_ = m.TrackedCgroups.Close()
 	}
 	if m.Events != nil {
-		m.Events.Close()
+		_ = m.Events.Close()
 	}
 }
 
@@ -54,13 +54,13 @@ type LeashdPrograms struct {
 
 func (p *LeashdPrograms) Close() {
 	if p.KprobeTcpConnect != nil {
-		p.KprobeTcpConnect.Close()
+		_ = p.KprobeTcpConnect.Close()
 	}
 	if p.KprobeUdpConnect != nil {
-		p.KprobeUdpConnect.Close()
+		_ = p.KprobeUdpConnect.Close()
 	}
 	if p.CgroupSkbEgress != nil {
-		p.CgroupSkbEgress.Close()
+		_ = p.CgroupSkbEgress.Close()
 	}
 }
 

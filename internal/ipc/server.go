@@ -18,12 +18,6 @@ type Server struct {
 	logger     *slog.Logger
 
 	statusFunc func() StatusResponse
-	// streamCh receives EnrichedEvent values from the daemon pipeline.
-	// We use interface{} here to avoid a circular import with daemon package.
-	streamCh <-chan interface{}
-
-	subscribers   []chan interface{}
-	subscribersMu sync.Mutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -59,7 +53,7 @@ func (s *Server) Start() error {
 	// Remove stale socket if it exists but is not live.
 	if _, err := os.Stat(s.socketPath); err == nil {
 		if conn, err := net.Dial("unix", s.socketPath); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			return &SocketConflictError{Path: s.socketPath}
 		}
 		s.logger.Warn("removing stale socket", "path", s.socketPath)
@@ -115,13 +109,13 @@ func (s *Server) acceptLoop() {
 		var cred *unix.Ucred
 		var credErr error
 		if rawConn != nil {
-			rawConn.Control(func(fd uintptr) {
+			_ = rawConn.Control(func(fd uintptr) {
 				cred, credErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
 			})
 		}
 		if credErr == nil && cred != nil && cred.Uid != uint32(os.Getuid()) {
 			s.logger.Warn("rejecting connection from different user", "uid", cred.Uid)
-			conn.Close()
+			_ = conn.Close()
 			continue
 		}
 
@@ -131,7 +125,7 @@ func (s *Server) acceptLoop() {
 }
 
 func (s *Server) handleConn(conn *net.UnixConn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var req Request
 	dec := json.NewDecoder(conn)

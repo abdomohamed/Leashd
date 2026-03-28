@@ -85,7 +85,7 @@ func appendToGitignore(path string, entry string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintln(f, entry)
 }
 

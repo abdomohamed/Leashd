@@ -101,7 +101,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("attach cgroup/skb: %w", err)
 		}
-		defer cgroupLink.Close()
+		defer func() { _ = cgroupLink.Close() }()
 
 		maps := loader.Maps()
 		if err := maps.AddTrackedCgroup(cgroupID); err != nil {
@@ -172,7 +172,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := child.Start(); err != nil {
-		cgroupFD.Close()
+		_ = cgroupFD.Close()
 		// Fallback: write PID to cgroup.procs after start.
 		child.SysProcAttr = &syscall.SysProcAttr{}
 		if err2 := child.Start(); err2 != nil {
@@ -180,7 +180,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		}
 		_ = mgr.AddPID(child.Process.Pid)
 	} else {
-		cgroupFD.Close()
+		_ = cgroupFD.Close()
 	}
 
 	logger.Info("child process started", "pid", child.Process.Pid, "cmd", args[0])

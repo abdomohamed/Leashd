@@ -164,11 +164,11 @@ func writeRulesAtomic(cfg *config.Config, path string) error {
 	}
 	data := config.Scaffold(cfg.Project.Name, cfg.Rules)
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
+		_ = f.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
-	f.Close()
+	_ = f.Close()
 	return os.Rename(tmp, path)
 }
 
@@ -192,7 +192,7 @@ func loadEvents(path string, since time.Duration) ([]auditEvent, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	cutoff := time.Time{}
 	if since > 0 {

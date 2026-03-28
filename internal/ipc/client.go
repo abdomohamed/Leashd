@@ -28,7 +28,7 @@ func (c *Client) Status() (*StatusResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	enc := json.NewEncoder(conn)
 	if err := enc.Encode(Request{Cmd: CmdStatus}); err != nil {

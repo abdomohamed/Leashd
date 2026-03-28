@@ -161,8 +161,8 @@ func (j *JSONLogSink) Write(_ context.Context, evt EnrichedEvent) error {
 		Meta: logMeta{
 			CgroupID:       evt.CgroupID,
 			CgroupPath:     evt.CgroupPath,
-			KernelVerdict:  verdictName(evt.ConnectEvent.Verdict),
-			EngineOverride: evt.ConnectEvent.Verdict != evt.FinalVerdict,
+			KernelVerdict:  verdictName(evt.Verdict),
+			EngineOverride: evt.Verdict != evt.FinalVerdict,
 			PolicyVersion:  evt.PolicyVer,
 		},
 	}
@@ -199,7 +199,7 @@ func (w *WebhookSink) Write(ctx context.Context, evt EnrichedEvent) error {
 		w.logger.Warn("webhook delivery failed", "url", w.url, "error", err)
 		return nil // non-fatal
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		w.logger.Warn("webhook returned error", "url", w.url, "status", resp.StatusCode)
 	}
