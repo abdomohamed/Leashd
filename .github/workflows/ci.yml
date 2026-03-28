@@ -55,8 +55,25 @@ jobs:
       - name: Build leashd and connector
         run: make build testbin
 
+      - name: Smoke test — verify leashd binary starts and loads BPF
+        run: |
+          set -euo pipefail
+          echo "=== leashd smoke test ==="
+          sudo env PATH="$PATH" bin/leashd run --no-daemon echo "BPF-less start OK" 2>&1
+          echo "=== BPF load test ==="
+          sudo env PATH="$PATH" bin/leashd run echo "BPF load OK" 2>&1 || {
+            echo "FAIL: leashd BPF load failed (see stderr above)"; exit 1
+          }
+
       - name: Run E2E tests
-        run: sudo env PATH="$PATH" GOPATH="$GOPATH" HOME="$HOME" make test-e2e
+        run: |
+          sudo env \
+            PATH="$PATH" \
+            GOPATH="$GOPATH" \
+            HOME="$HOME" \
+            LEASHD_BIN="$(pwd)/bin/leashd" \
+            CONNECTOR_BIN="$(pwd)/tests/e2e/helpers/connector/connector" \
+            make test-e2e
 
   lint:
     name: Lint

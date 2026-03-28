@@ -5,7 +5,9 @@ package helpers
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -74,17 +76,25 @@ func ListenAddr() string {
 }
 
 // ConnectorBinary returns the path to the connector test binary.
+// Resolution order: $CONNECTOR_BIN env var → repo root relative path.
 func ConnectorBinary(t *testing.T) string {
 	t.Helper()
-	p := "tests/e2e/helpers/connector/connector"
-	if _, err := exec.LookPath(p); err == nil {
-		return p
+	if v := os.Getenv("CONNECTOR_BIN"); v != "" {
+		return v
 	}
-	// Try abs path via go build output.
-	out, err := exec.Command("go", "build", "-o", "/tmp/leashd-connector",
-		"./tests/e2e/helpers/connector/").CombinedOutput()
-	if err != nil {
-		t.Fatalf("build connector: %v\n%s", err, out)
+	// go test sets cwd to the package dir; walk up to find the built connector.
+	dir, _ := os.Getwd()
+	for {
+		candidate := filepath.Join(dir, "tests", "e2e", "helpers", "connector", "connector")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
-	return "/tmp/leashd-connector"
+	t.Fatalf("connector binary not found (run 'make testbin' first, or set CONNECTOR_BIN)")
+	return ""
 }

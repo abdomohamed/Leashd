@@ -43,11 +43,7 @@ func StartLeashd(t *testing.T, rulesYAML string, wrappedCmd ...string) *LeashSes
 		t.Fatalf("write rules.yaml: %v", err)
 	}
 
-	leashd, err := exec.LookPath("leashd")
-	if err != nil {
-		// Try the built binary.
-		leashd = "bin/leashd"
-	}
+	leashd := LeashdBinary()
 
 	sockPath, err := ipc.ProjectSocketPath(dir)
 	if err != nil {
@@ -144,16 +140,28 @@ func WaitForSocketPath(dir string) (string, error) {
 }
 
 // LeashdBinary returns the path to the leashd binary to use in tests.
-// Prefers ./bin/leashd (built by make build), falls back to PATH.
+// Resolution order: $LEASHD_BIN env var → PATH → repo root bin/leashd.
 func LeashdBinary() string {
-	if _, err := os.Stat("bin/leashd"); err == nil {
-		abs, _ := filepath.Abs("bin/leashd")
-		return abs
+	if v := os.Getenv("LEASHD_BIN"); v != "" {
+		return v
 	}
 	if p, err := exec.LookPath("leashd"); err == nil {
 		return p
 	}
-	return "leashd"
+	// go test sets cwd to the package dir; walk up to repo root.
+	dir, _ := os.Getwd()
+	for {
+		candidate := filepath.Join(dir, "bin", "leashd")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "leashd" // last resort — will fail with a clear error
 }
 
 // RunLeashd runs a one-shot leashd command (not run, e.g. "status") in the
