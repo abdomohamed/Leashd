@@ -1,6 +1,6 @@
 #pragma once
 
-#include <linux/types.h>
+/* Integer types come from vmlinux.h (included before this header). */
 
 /* Verdict values stored in the policy map and ring buffer events. */
 #define VERDICT_ALLOW  0

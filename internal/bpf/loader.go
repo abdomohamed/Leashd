@@ -43,7 +43,7 @@ func Load(logger *slog.Logger) (*Loader, error) {
 	}
 
 	objs := &LeashdObjects{}
-	if err := loadLeashdObjects(objs, nil); err != nil {
+	if err := LoadLeashdObjects(objs, nil); err != nil {
 		var ve *ebpf.VerifierError
 		if ok := isVerifierError(err, &ve); ok {
 			return nil, fmt.Errorf("BPF verifier error:\n%s", ve)

@@ -208,10 +208,12 @@ __marimo__/
 
 # Go
 /bin/
-*.o
-leashd_bpf*.go
-leashd_bpf*.o
 vendor/
+# BPF compiled objects — exclude everything except the generated leashd objects
+# (leashd_bpf*.go and leashd_bpf*.o must be committed so CI doesn't need bpftool)
+*.o
+!internal/bpf/leashd_bpf*.o
+!internal/bpf/leashd_bpf*.go
 
 # leashd runtime artifacts
 .leashd/

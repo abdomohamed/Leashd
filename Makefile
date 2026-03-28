@@ -11,12 +11,12 @@ CONNECTOR   := tests/e2e/helpers/connector/connector
 all: generate build
 
 vmlinux:
-	@echo "==> Generating vmlinux.h from host kernel BTF..."
+	@echo "==> Generating vmlinux.h from host kernel BTF (optional — file is pre-committed)..."
 	@mkdir -p ebpf/headers
 	bpftool btf dump file /sys/kernel/btf/vmlinux format c > $(VMLINUX)
-	@echo "    $(VMLINUX) generated ($(shell wc -l < $(VMLINUX)) lines)"
+	@echo "    $(VMLINUX) regenerated ($(shell wc -l < $(VMLINUX)) lines)"
 
-generate: $(VMLINUX)
+generate:
 	@echo "==> Running go generate (bpf2go)..."
 	@# Remove the stub — bpf2go will generate the real leashd_bpfel.go / leashd_bpfeb.go.
 	@# If go generate fails we restore the stub so the repo remains compilable.
