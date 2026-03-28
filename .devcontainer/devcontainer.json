@@ -1,0 +1,29 @@
+{
+  "name": "leashd",
+  "image": "mcr.microsoft.com/devcontainers/go:1.22-bookworm",
+  "runArgs": [
+    "--privileged",
+    "--network=host",
+    "--pid=host",
+    "-v", "/sys/fs/cgroup:/sys/fs/cgroup",
+    "-v", "/sys/kernel/btf:/sys/kernel/btf:ro",
+    "-v", "/sys/kernel/debug:/sys/kernel/debug:ro"
+  ],
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.cpptools"
+      ],
+      "settings": {
+        "go.toolsManagement.autoUpdate": true,
+        "go.lintTool": "golangci-lint",
+        "[go]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "golang.go"
+        }
+      }
+    }
+  }
+}
