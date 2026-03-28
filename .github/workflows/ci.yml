@@ -40,24 +40,23 @@ jobs:
           go-version: "1.22"
           cache: true
 
-      - name: Install clang / libbpf
+      - name: Install clang / libbpf / bpftool
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang llvm libbpf-dev make
-
-      - name: Install bpftool (standalone binary)
-        run: |
-          # Use the standalone bpftool release from the libbpf project — avoids
-          # kernel-package version skew on GitHub Actions Azure-kernel runners.
-          set -euo pipefail
-          BPFTOOL_TAG=$(curl -fsSL \
-            "https://api.github.com/repos/libbpf/bpftool/releases/latest" \
-            | grep '"tag_name"' | head -1 | cut -d'"' -f4)
-          echo "Installing bpftool ${BPFTOOL_TAG}"
-          curl -fsSL \
-            "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_TAG}/bpftool-${BPFTOOL_TAG}-amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin bpftool
-          sudo chmod 0755 /usr/local/bin/bpftool
+          sudo apt-get install -y --no-install-recommends \
+            clang llvm libbpf-dev make \
+            linux-tools-common linux-tools-generic
+          # linux-tools-generic places the actual ELF binary under a versioned dir.
+          # The /usr/sbin/bpftool wrapper only works if the running kernel matches;
+          # on Azure runners (5.x-azure) that kernel package is absent.
+          # So we find the real binary and put it directly on PATH.
+          BPFTOOL=$(find /usr/lib/linux-tools -name bpftool ! -type l 2>/dev/null \
+                    | sort -V | tail -1)
+          if [ -z "$BPFTOOL" ]; then
+            echo "ERROR: bpftool binary not found after install" >&2
+            exit 1
+          fi
+          sudo ln -sf "$BPFTOOL" /usr/local/bin/bpftool
           bpftool version
 
       - name: Generate vmlinux.h and BPF objects
