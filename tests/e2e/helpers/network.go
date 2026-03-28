@@ -3,11 +3,13 @@
 package helpers
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -25,28 +27,74 @@ func ConnectTCP(addr string) error {
 
 // SpawnConnector runs the connector binary inside the leashd-managed cgroup
 // so that BPF kprobe and cgroup/skb enforcement applies to the connection.
-// It uses SysProcAttr.CgroupFD to place the process at fork time, mirroring
-// how leashd itself places the wrapped child into the cgroup.
+//
+// Uses SysProcAttr.CgroupFD for atomic placement at fork time (Linux 5.7+).
+// Also writes the PID to cgroup.procs immediately after start as belt-and-suspenders.
+// If CgroupFD placement fails, falls back to cgroup.procs only.
 func SpawnConnector(t *testing.T, sess *LeashSession, addr string) error {
 	t.Helper()
 	connBin := ConnectorBinary(t)
-	cmd := exec.Command(connBin, "--addr", addr, "--timeout", "3s")
-	cmd.Dir = sess.Dir
 
-	if sess.CgroupPath != "" {
-		cgroupFD, err := os.Open(sess.CgroupPath)
-		if err == nil {
-			defer cgroupFD.Close()
-			cmd.SysProcAttr = &syscall.SysProcAttr{
-				CgroupFD:    int(cgroupFD.Fd()),
-				UseCgroupFD: true,
+	run := func(withCgroupFD bool) error {
+		cmd := exec.Command(connBin, "--addr", addr, "--timeout", "3s")
+		cmd.Dir = sess.Dir
+		var outBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &outBuf
+
+		if withCgroupFD && sess.CgroupPath != "" {
+			cgroupFD, err := os.Open(sess.CgroupPath)
+			if err != nil {
+				t.Logf("open cgroup dir %s: %v", sess.CgroupPath, err)
+			} else {
+				cmd.SysProcAttr = &syscall.SysProcAttr{
+					CgroupFD:    int(cgroupFD.Fd()),
+					UseCgroupFD: true,
+				}
+				if err := cmd.Start(); err != nil {
+					_ = cgroupFD.Close()
+					t.Logf("connector start with CgroupFD failed: %v — will retry without", err)
+					return err
+				}
+				_ = cgroupFD.Close()
+				// Belt-and-suspenders: also write PID to cgroup.procs.
+				writeCgroupProcs(t, sess.CgroupPath, cmd.Process.Pid)
+				err := cmd.Wait()
+				t.Logf("connector (CgroupFD) pid=%d output: %s", cmd.Process.Pid, outBuf.String())
+				return err
 			}
 		}
+
+		// cgroup.procs approach: start first, then move into cgroup.
+		if err := cmd.Start(); err != nil {
+			t.Logf("connector start failed: %v", err)
+			return err
+		}
+		writeCgroupProcs(t, sess.CgroupPath, cmd.Process.Pid)
+		err := cmd.Wait()
+		t.Logf("connector (cgroup.procs) pid=%d output: %s", cmd.Process.Pid, outBuf.String())
+		return err
 	}
 
-	out, err := cmd.CombinedOutput()
-	t.Logf("connector output: %s", out)
-	return err
+	if err := run(true); err != nil {
+		// If CgroupFD approach failed, try without it.
+		return run(false)
+	}
+	return nil
+}
+
+func writeCgroupProcs(t *testing.T, cgroupPath string, pid int) {
+	t.Helper()
+	if cgroupPath == "" {
+		t.Logf("warning: CgroupPath empty — connector pid=%d outside cgroup, BPF events won't fire", pid)
+		return
+	}
+	procsPath := filepath.Join(cgroupPath, "cgroup.procs")
+	if err := os.WriteFile(procsPath, []byte(strconv.Itoa(pid)+"\n"), 0); err != nil {
+		t.Logf("warning: write cgroup.procs %s: %v — BPF events may not fire", procsPath, err)
+	} else {
+		t.Logf("connector pid=%d placed in cgroup %s", pid, cgroupPath)
+	}
 }
 
 // ListenTCP starts a TCP listener on a free port on localhost and returns
