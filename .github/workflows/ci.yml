@@ -29,8 +29,8 @@ jobs:
       - name: Run integration tests (cgroup — requires root)
         run: sudo env PATH="$PATH" GOPATH="$GOPATH" HOME="$HOME" go test -tags=integration ./internal/... -count=1 -timeout 120s -v
 
-  e2e:
-    name: End-to-End Tests
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,49 +40,69 @@ jobs:
           cache: true
 
       - name: Install BPF build dependencies
-        # Only clang + libbpf-dev needed — vmlinux.h is pre-committed to the repo,
-        # so bpftool is not required to regenerate it.
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang llvm libbpf-dev make
 
       - name: Generate BPF objects (bpf2go)
         run: |
-          set -euo pipefail
           echo "Kernel: $(uname -r)"
           make generate
 
       - name: Build leashd and connector
         run: make build testbin
 
-      - name: Smoke test — verify leashd binary starts and loads BPF
-        run: |
-          set -euo pipefail
-          SMOKE_DIR=$(mktemp -d)
-          cat > "$SMOKE_DIR/rules.yaml" <<'EOF'
-          version: "1"
-          project:
-            name: smoke-test
-          defaults:
-            action: warn
-            log: true
-          EOF
-          echo "=== leashd smoke test ==="
-          sudo env PATH="$PATH" bin/leashd run --no-daemon --dir "$SMOKE_DIR" echo "BPF-less start OK" 2>&1
-          echo "=== BPF load test ==="
-          sudo env PATH="$PATH" bin/leashd run --dir "$SMOKE_DIR" echo "BPF load OK" 2>&1 || {
-            echo "FAIL: leashd BPF load failed (see stderr above)"; exit 1
-          }
+      - name: Compile E2E test binary (static)
+        run: make testbin-e2e
 
-      - name: Run E2E tests
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: leashd-build
+          retention-days: 1
+          path: |
+            bin/leashd
+            tests/e2e/helpers/connector/connector
+            tests/e2e/e2e.test
+
+  e2e:
+    name: E2E Tests (${{ matrix.kernel }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel:
+          - "6.6-main"
+          - "5.15-main"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: leashd-build
+
+      - name: Restore executable permissions
         run: |
-          sudo env \
-            PATH="$PATH" \
-            GOPATH="$GOPATH" \
-            HOME="$HOME" \
-            LEASHD_BIN="$(pwd)/bin/leashd" \
-            CONNECTOR_BIN="$(pwd)/tests/e2e/helpers/connector/connector" \
-            make test-e2e
+          chmod +x bin/leashd
+          chmod +x tests/e2e/helpers/connector/connector
+          chmod +x tests/e2e/e2e.test
+
+      - name: Run E2E tests in VM (kernel ${{ matrix.kernel }})
+        uses: cilium/little-vm-helper-action@v1
+        with:
+          test-name: "leashd-e2e-${{ matrix.kernel }}"
+          image: "kind"
+          image-version: "${{ matrix.kernel }}"
+          install-dependencies: "true"
+          host-mount: "${{ github.workspace }}"
+          cmd: |
+            set -ex
+            uname -r
+            cd /mnt
+            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s
 
   lint:
     name: Lint

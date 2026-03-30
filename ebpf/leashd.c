@@ -108,8 +108,8 @@ int kprobe_tcp_connect(struct pt_regs *ctx)
 
     __u32 dst_ip   = 0;
     __u16 dst_port = 0;
-    bpf_probe_read_user(&dst_ip,   sizeof(dst_ip),   &uaddr->sin_addr.s_addr);
-    bpf_probe_read_user(&dst_port, sizeof(dst_port), &uaddr->sin_port);
+    bpf_probe_read_kernel(&dst_ip,   sizeof(dst_ip),   &uaddr->sin_addr.s_addr);
+    bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &uaddr->sin_port);
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid      = (__u32)(pid_tgid >> 32);
@@ -139,8 +139,8 @@ int kprobe_udp_connect(struct pt_regs *ctx)
 
     __u32 dst_ip   = 0;
     __u16 dst_port = 0;
-    bpf_probe_read_user(&dst_ip,   sizeof(dst_ip),   &uaddr->sin_addr.s_addr);
-    bpf_probe_read_user(&dst_port, sizeof(dst_port), &uaddr->sin_port);
+    bpf_probe_read_kernel(&dst_ip,   sizeof(dst_ip),   &uaddr->sin_addr.s_addr);
+    bpf_probe_read_kernel(&dst_port, sizeof(dst_port), &uaddr->sin_port);
 
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid      = (__u32)(pid_tgid >> 32);

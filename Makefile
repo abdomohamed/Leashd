@@ -5,8 +5,9 @@ BPF_CFLAGS  := -O2 -g -Wall -Wno-unused-value -Wno-pointer-sign \
 VMLINUX     := ebpf/headers/vmlinux.h
 BINARY      := bin/leashd
 CONNECTOR   := tests/e2e/helpers/connector/connector
+LVH_KERNEL  ?= 6.6-main
 
-.PHONY: all vmlinux generate build test test-int test-e2e test-all testbin clean lint
+.PHONY: all vmlinux generate build test test-int test-e2e test-e2e-vm test-all testbin testbin-e2e devsetup clean lint
 
 all: generate build
 
@@ -37,23 +38,39 @@ testbin:
 	go build -o $(CONNECTOR) ./tests/e2e/helpers/connector/
 	@echo "    $(CONNECTOR) built"
 
+testbin-e2e:
+	@echo "==> Compiling E2E test binary (static, for VM execution)..."
+	CGO_ENABLED=0 go test -tags=e2e -c -o tests/e2e/e2e.test ./tests/e2e/
+	@echo "    tests/e2e/e2e.test compiled"
+
 test:
 	@echo "==> Running unit tests (no root required)..."
 	go test ./internal/... -count=1 -timeout 60s
 
 test-int:
 	@echo "==> Running integration tests (requires root)..."
-	go test -tags=integration ./internal/... -count=1 -timeout 120s -v
+	sudo -E env PATH="$(PATH)" go test -tags=integration ./internal/... -count=1 -timeout 120s -v
 
 test-e2e: build testbin
 	@echo "==> Running E2E tests (requires root + eBPF kernel)..."
-	go test -tags=e2e ./tests/e2e/... -count=1 -timeout 300s -v
+	sudo -E env PATH="$(PATH)" LEASHD_BIN=$(CURDIR)/$(BINARY) CONNECTOR_BIN=$(CURDIR)/$(CONNECTOR) \
+	  go test -tags=e2e ./tests/e2e/... -count=1 -timeout 300s -v
+
+test-e2e-vm: build testbin testbin-e2e
+	@echo "==> Running E2E tests in LVH VM (kernel: $(LVH_KERNEL))..."
+	@LVH_KERNEL=$(LVH_KERNEL) scripts/run-e2e-vm.sh
 
 test-all: test test-int test-e2e
+
+devsetup:
+	@echo "==> Installing VM testing tools (QEMU, sshpass, lvh)..."
+	sudo apt-get install -y --no-install-recommends qemu-system-x86 sshpass
+	CGO_ENABLED=0 GOTOOLCHAIN=auto go install github.com/cilium/little-vm-helper/cmd/lvh@v0.0.28
+	@echo "==> VM tools ready. Run: make test-e2e-vm"
 
 lint:
 	golangci-lint run ./...
 
 clean:
-	rm -f $(BINARY) $(CONNECTOR)
+	rm -f $(BINARY) $(CONNECTOR) tests/e2e/e2e.test
 	rm -f internal/bpf/leashd_bpf*.go internal/bpf/leashd_bpf*.o

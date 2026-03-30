@@ -56,7 +56,7 @@ defaults:
   log: true
 `
 	// StartLeashd should succeed despite the stale socket.
-	sess := helpers.StartLeashd(t, rulesYAML, "sleep", "30")
+	sess := helpers.StartLeashdInDir(t, dir, rulesYAML, "sleep", "30")
 	if sess.SockPath != sockPath {
 		t.Errorf("expected socket path %s, got %s", sockPath, sess.SockPath)
 	}

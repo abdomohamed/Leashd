@@ -40,6 +40,7 @@ type Daemon struct {
 	dispatcher *Dispatcher
 	cgroupMgr  *cgroup.Manager
 	ipcServer  *ipc.Server
+	broker     *ipc.Broker
 
 	eventCh  chan bpf.ConnectEvent
 	enrichCh chan EnrichedEvent
@@ -74,6 +75,9 @@ func New(
 	}
 	srv := ipc.NewServer(sockPath, logger)
 
+	broker := &ipc.Broker{}
+	srv.SetBroker(broker)
+
 	d := &Daemon{
 		cfgPath:    cfgPath,
 		projectDir: projectDir,
@@ -83,6 +87,7 @@ func New(
 		dispatcher: dispatcher,
 		cgroupMgr:  cgroupMgr,
 		ipcServer:  srv,
+		broker:     broker,
 		eventCh:    make(chan bpf.ConnectEvent, 4096),
 		enrichCh:   make(chan EnrichedEvent, 1024),
 		logger:     logger,
@@ -90,7 +95,6 @@ func New(
 		cancel:     cancel,
 	}
 	srv.SetStatusFunc(d.statusSnapshot)
-	srv.SetStreamCh(d.enrichCh)
 	return d, nil
 }
 
@@ -172,8 +176,13 @@ func (d *Daemon) runRulesWatcher() {
 			if !ok {
 				return
 			}
-			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) ||
+				event.Has(fsnotify.Rename) || event.Has(fsnotify.Remove) {
 				d.logger.Info("rules.yaml change detected", "path", d.cfgPath)
+				// Re-add in case the file was atomically replaced (rename-over):
+				// inotify fires IN_DELETE_SELF (Remove) on the replaced inode and
+				// drops the watch; re-adding here watches the new inode.
+				_ = watcher.Add(d.cfgPath)
 				d.reloadPolicy()
 			}
 		case err, ok := <-watcher.Errors:
@@ -355,6 +364,11 @@ func (d *Daemon) runAlertDispatcher() {
 			return
 		case evt := <-d.enrichCh:
 			d.dispatcher.Dispatch(d.ctx, evt)
+			if d.broker != nil {
+				if data, err := marshalLogEvent(evt); err == nil {
+					d.broker.Publish(data)
+				}
+			}
 		}
 	}
 }

@@ -11,6 +11,43 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Broker is a simple pub-sub fanout for streaming JSON events to IPC clients.
+type Broker struct {
+	mu   sync.Mutex
+	subs map[int]chan json.RawMessage
+	next int
+}
+
+// Subscribe returns a channel of JSON-encoded events and an unsubscribe function.
+func (b *Broker) Subscribe() (<-chan json.RawMessage, func()) {
+	b.mu.Lock()
+	id := b.next
+	b.next++
+	ch := make(chan json.RawMessage, 256)
+	if b.subs == nil {
+		b.subs = make(map[int]chan json.RawMessage)
+	}
+	b.subs[id] = ch
+	b.mu.Unlock()
+	return ch, func() {
+		b.mu.Lock()
+		delete(b.subs, id)
+		b.mu.Unlock()
+	}
+}
+
+// Publish sends msg to all current subscribers, dropping slow ones.
+func (b *Broker) Publish(msg json.RawMessage) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, ch := range b.subs {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
 // Server is the UNIX domain socket IPC server embedded in leashd run.
 type Server struct {
 	socketPath string
@@ -18,6 +55,7 @@ type Server struct {
 	logger     *slog.Logger
 
 	statusFunc func() StatusResponse
+	broker     *Broker
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -40,12 +78,9 @@ func (s *Server) SetStatusFunc(fn func() StatusResponse) {
 	s.statusFunc = fn
 }
 
-// SetStreamCh sets the channel from which the server fans out events to streaming clients.
-func (s *Server) SetStreamCh(ch interface{}) {
-	// The channel type is opaque here; the server only reads from it via reflection
-	// in a separate goroutine. Clients who want typed access should use the daemon's
-	// enrichCh directly. The IPC server bridges it to socket clients.
-	_ = ch // wired up in Start() via a wrapper goroutine
+// SetBroker wires up the event broker for streaming clients.
+func (s *Server) SetBroker(b *Broker) {
+	s.broker = b
 }
 
 // Start begins listening on the UNIX socket.
@@ -143,6 +178,23 @@ func (s *Server) handleConn(conn *net.UnixConn) {
 			_ = enc.Encode(s.statusFunc())
 		} else {
 			_ = enc.Encode(ErrorResponse{Error: "status not available"})
+		}
+	case CmdStream:
+		if s.broker == nil {
+			_ = enc.Encode(ErrorResponse{Error: "stream not available"})
+			return
+		}
+		ch, unsub := s.broker.Subscribe()
+		defer unsub()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case msg := <-ch:
+				if _, err := conn.Write(append([]byte(msg), '\n')); err != nil {
+					return
+				}
+			}
 		}
 	default:
 		_ = enc.Encode(ErrorResponse{Error: "unknown command: " + req.Cmd})

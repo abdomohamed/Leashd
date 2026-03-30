@@ -140,6 +140,12 @@ func Scaffold(projectName string, extraRules []Rule) []byte {
 			if len(r.Domains) > 0 {
 				lines = append(lines, "    domains: "+yamlStringSlice(r.Domains))
 			}
+			if len(r.IPs) > 0 {
+				lines = append(lines, "    ips: "+yamlStringSlice(r.IPs))
+			}
+			if len(r.CIDRs) > 0 {
+				lines = append(lines, "    cidrs: "+yamlStringSlice(r.CIDRs))
+			}
 			if len(r.Ports) > 0 {
 				lines = append(lines, "    ports: "+yamlUint16Slice(r.Ports))
 			}

@@ -12,6 +12,14 @@ func TestCgroupLifecycle(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("cgroup integration tests require root")
 	}
+	// Writing PIDs to cgroup.procs fails when running inside a container cgroup
+	// namespace (e.g. Docker devcontainer). Detect this by comparing our ns to
+	// the initial cgroup namespace held by PID 1.
+	selfNS, err1 := os.Readlink("/proc/self/ns/cgroup")
+	initNS, err2 := os.Readlink("/proc/1/ns/cgroup")
+	if err1 == nil && err2 == nil && selfNS != initNS {
+		t.Skip("cgroup integration tests require host cgroup namespace (skipping inside container)")
+	}
 
 	name := fmt.Sprintf("leashd-test-%d", os.Getpid())
 	m := NewManager(name)

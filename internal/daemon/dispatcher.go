@@ -220,6 +220,28 @@ func verdictName(v uint8) string {
 	}
 }
 
+// marshalLogEvent encodes evt in the same JSON format as JSONLogSink.
+func marshalLogEvent(evt EnrichedEvent) ([]byte, error) {
+	return json.Marshal(logEvent{
+		Timestamp:   evt.Timestamp,
+		PID:         evt.PID,
+		Comm:        commString(evt.Comm),
+		DstIP:       evt.DstIPStr,
+		DstPort:     networkToHostPort(evt.DstPort),
+		Protocol:    evt.Protocol,
+		ReverseDNS:  evt.ReverseDNS,
+		MatchedRule: evt.MatchedRule,
+		Verdict:     verdictName(evt.FinalVerdict),
+		Meta: logMeta{
+			CgroupID:       evt.CgroupID,
+			CgroupPath:     evt.CgroupPath,
+			KernelVerdict:  verdictName(evt.Verdict),
+			EngineOverride: evt.Verdict != evt.FinalVerdict,
+			PolicyVersion:  evt.PolicyVer,
+		},
+	})
+}
+
 func dirOf(path string) string {
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == '/' {

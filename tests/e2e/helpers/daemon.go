@@ -36,12 +36,21 @@ type LeashSession struct {
 
 // StartLeashd writes rulesYAML to a temp directory, then starts
 // `leashd run <wrappedCmd>` as a subprocess. It waits up to 3s for the
+// StartLeashdInDir is like StartLeashd but uses the provided dir instead of
+// creating a new one. The caller is responsible for ensuring dir exists.
+func StartLeashdInDir(t *testing.T, dir, rulesYAML string, wrappedCmd ...string) *LeashSession {
+	t.Helper()
+	return startLeashd(t, dir, rulesYAML, wrappedCmd...)
+}
+
 // IPC socket to appear before returning.
 func StartLeashd(t *testing.T, rulesYAML string, wrappedCmd ...string) *LeashSession {
 	t.Helper()
+	return startLeashd(t, t.TempDir(), rulesYAML, wrappedCmd...)
+}
 
-	dir := t.TempDir()
-
+func startLeashd(t *testing.T, dir, rulesYAML string, wrappedCmd ...string) *LeashSession {
+	t.Helper()
 	rulesPath := filepath.Join(dir, "rules.yaml")
 	if err := os.WriteFile(rulesPath, []byte(rulesYAML), 0644); err != nil {
 		t.Fatalf("write rules.yaml: %v", err)
