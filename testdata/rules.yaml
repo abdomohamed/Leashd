@@ -1,0 +1,25 @@
+version: "1"
+
+project:
+  name: "test-project"
+  description: "Fixture for unit and integration tests"
+
+defaults:
+  action: warn
+  log: true
+
+rules:
+  - id: pypi
+    comment: "PyPI package index"
+    domains: ["pypi.org", "files.pythonhosted.org"]
+    ports: [443, 80]
+    action: allow
+
+  - id: loopback
+    comment: "Allow loopback for local test servers"
+    cidrs: ["127.0.0.0/8"]
+    action: allow
+
+notifications:
+  terminal: true
+  json_log: ".leashd/events.jsonl"

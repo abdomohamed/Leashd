@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Run unit tests
+        run: go test ./internal/... -count=1 -timeout 60s
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Run integration tests (cgroup — requires root)
+        run: sudo env PATH="$PATH" GOPATH="$GOPATH" HOME="$HOME" go test -tags=integration ./internal/... -count=1 -timeout 120s -v
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install BPF build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang llvm libbpf-dev make
+
+      - name: Generate BPF objects (bpf2go)
+        run: |
+          echo "Kernel: $(uname -r)"
+          make generate
+
+      - name: Build leashd and connector
+        run: make build testbin
+
+      - name: Compile E2E test binary (static)
+        run: make testbin-e2e
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: leashd-build
+          retention-days: 1
+          path: |
+            bin/leashd
+            tests/e2e/helpers/connector/connector
+            tests/e2e/e2e.test
+
+  e2e:
+    name: E2E Tests (${{ matrix.kernel }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel:
+          - "6.6-20260310.122539"
+          - "6.1-20260310.122539"
+          - "5.15-20260310.122539"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: leashd-build
+
+      - name: Restore executable permissions
+        run: |
+          chmod +x bin/leashd
+          chmod +x tests/e2e/helpers/connector/connector
+          chmod +x tests/e2e/e2e.test
+
+      - name: Run E2E tests in VM (kernel ${{ matrix.kernel }})
+        uses: cilium/little-vm-helper@ad43ff511dd5365a0011ae9f864ec959c36daebf # v0.0.28
+        with:
+          test-name: "leashd-e2e-${{ matrix.kernel }}"
+          image: "kind"
+          image-version: "${{ matrix.kernel }}"
+          install-dependencies: "true"
+          host-mount: "${{ github.workspace }}"
+          cmd: |
+            set -ex
+            uname -r
+            id
+            mount | grep cgroup || true
+            ls -la /sys/fs/cgroup/ || true
+            cat /proc/self/cgroup || true
+            ls -la /host/bin/leashd /host/tests/e2e/helpers/connector/connector /host/tests/e2e/e2e.test || true
+            cd /host
+            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s 2>&1 || {
+              echo "=== E2E FAILED — diagnostic dump ==="
+              echo "--- cgroup tree ---"
+              find /sys/fs/cgroup/leashd -maxdepth 4 2>/dev/null || echo "(no leashd cgroup)"
+              echo "--- events.jsonl files ---"
+              find /tmp -name "events.jsonl" 2>/dev/null | while read f; do
+                echo "=== $f ==="; cat "$f" || true
+              done
+              echo "--- leashd binary info ---"
+              file /host/bin/leashd || true
+              echo "--- BPF map types available ---"
+              ls /sys/fs/bpf/ 2>/dev/null || echo "(no bpffs)"
+              exit 1
+            }
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
