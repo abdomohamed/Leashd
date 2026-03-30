@@ -92,8 +92,8 @@ func startLeashd(t *testing.T, dir, rulesYAML string, wrappedCmd ...string) *Lea
 		cmd:       cmd,
 	}
 
-	// Wait for the socket to appear.
-	if err := WaitForSocket(sockPath, 5*time.Second); err != nil {
+	// Wait for the socket to appear (up to 15s to accommodate slow BPF JIT on first run).
+	if err := WaitForSocket(sockPath, 15*time.Second); err != nil {
 		_ = cmd.Process.Kill()
 		t.Fatalf("leashd did not create socket: %v", err)
 	}

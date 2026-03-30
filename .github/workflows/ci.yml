@@ -101,8 +101,26 @@ jobs:
           cmd: |
             set -ex
             uname -r
+            id
+            mount | grep cgroup || true
+            ls -la /sys/fs/cgroup/ || true
+            cat /proc/self/cgroup || true
+            ls -la /host/bin/leashd /host/tests/e2e/helpers/connector/connector /host/tests/e2e/e2e.test || true
             cd /host
-            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s
+            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s 2>&1 || {
+              echo "=== E2E FAILED — diagnostic dump ==="
+              echo "--- cgroup tree ---"
+              find /sys/fs/cgroup/leashd -maxdepth 4 2>/dev/null || echo "(no leashd cgroup)"
+              echo "--- events.jsonl files ---"
+              find /tmp -name "events.jsonl" 2>/dev/null | while read f; do
+                echo "=== $f ==="; cat "$f" || true
+              done
+              echo "--- leashd binary info ---"
+              file /host/bin/leashd || true
+              echo "--- BPF map types available ---"
+              ls /sys/fs/bpf/ 2>/dev/null || echo "(no bpffs)"
+              exit 1
+            }
 
   lint:
     name: Lint

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -24,6 +26,31 @@ func TestMain(m *testing.M) {
 		fmt.Println("SKIP: e2e tests require host cgroup namespace (skipping inside container)")
 		os.Exit(0)
 	}
+
+	// Print environment info to help diagnose CI failures.
+	fmt.Println("=== E2E test environment ===")
+	if data, err := os.ReadFile("/proc/self/cgroup"); err == nil {
+		fmt.Printf("self cgroup: %s", string(data))
+	}
+	if out, err := exec.Command("mount").Output(); err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.Contains(line, "cgroup") {
+				fmt.Println("mount:", line)
+			}
+		}
+	}
+	if entries, err := os.ReadDir("/sys/fs/cgroup"); err == nil {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		fmt.Printf("/sys/fs/cgroup: %s\n", strings.Join(names, " "))
+	}
+	if data, err := os.ReadFile("/proc/version"); err == nil {
+		fmt.Printf("kernel: %s", string(data))
+	}
+	fmt.Println("============================")
+
 	os.Exit(m.Run())
 }
 
