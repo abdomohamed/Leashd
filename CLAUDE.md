@@ -44,9 +44,9 @@ Build tags (`integration`, `e2e`) gate which tests compile. E2E tests call `make
 In CI, E2E tests run inside ephemeral QEMU VMs using [`cilium/little-vm-helper-action`](https://github.com/cilium/little-vm-helper-action) against a matrix of kernel versions (`6.6-main`, `5.15-main`). The flow:
 
 1. `build` job: compiles `bin/leashd`, `connector`, and a static `tests/e2e/e2e.test` binary (`make testbin-e2e`) — uploads them as artifacts.
-2. `e2e` job (matrix): downloads artifacts, mounts workspace into VM at `/mnt`, runs `e2e.test` as root inside the VM.
+2. `e2e` job (matrix): downloads artifacts, mounts workspace into VM at `/host`, runs `e2e.test` as root inside the VM.
 
-The test binary's path-walking discovery (`bin/leashd`, `tests/e2e/helpers/connector/connector`) works automatically when the binary is executed from `/mnt`.
+The test binary's path-walking discovery (`bin/leashd`, `tests/e2e/helpers/connector/connector`) works automatically when the binary is executed from `/host`.
 
 To add a kernel to the matrix, add it to `matrix.kernel` in `.github/workflows/ci.yml`. Available versions: `quay.io/lvh-images/kind:{version}-main` (e.g. `6.1-main`, `5.10-main`).
 
@@ -59,7 +59,7 @@ make test-e2e-vm              # default kernel: 6.6-main
 LVH_KERNEL=5.15-main make test-e2e-vm   # specific kernel
 ```
 
-`make test-e2e-vm` builds all binaries, boots `quay.io/lvh-images/kind:$LVH_KERNEL` via QEMU, SSHes in (empty root password), and runs the pre-compiled `e2e.test` binary from the mounted workspace (`/mnt`). VM images are cached in `~/.cache/lvh`. First run pulls the image (~1–2 GB). Console log: `/tmp/lvh-<kernel>.log`.
+`make test-e2e-vm` builds all binaries, boots `quay.io/lvh-images/kind:$LVH_KERNEL` via QEMU, SSHes in (empty root password), and runs the pre-compiled `e2e.test` binary from the mounted workspace (`/host`). VM images are cached in `~/.cache/lvh`. First run pulls the image (~1–2 GB). Console log: `/tmp/lvh-<kernel>.log`.
 
 To install the tools in an existing session: `make devsetup`.
 

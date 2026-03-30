@@ -91,7 +91,7 @@ jobs:
           chmod +x tests/e2e/e2e.test
 
       - name: Run E2E tests in VM (kernel ${{ matrix.kernel }})
-        uses: cilium/little-vm-helper-action@v1
+        uses: cilium/little-vm-helper@ad43ff511dd5365a0011ae9f864ec959c36daebf # v0.0.28
         with:
           test-name: "leashd-e2e-${{ matrix.kernel }}"
           image: "kind"
@@ -101,7 +101,7 @@ jobs:
           cmd: |
             set -ex
             uname -r
-            cd /mnt
+            cd /host
             ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s
 
   lint:
