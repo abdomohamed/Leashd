@@ -183,7 +183,7 @@ Verdicts: `allow` (0), `warn` (1), `block` (2)
 
 ### Prerequisites
 
-- **Linux** with kernel **5.8+** (cgroup v2, ring buffers, BPF CO-RE)
+- **Linux** with kernel **5.8+** and `CONFIG_DEBUG_INFO_BTF=y` (cgroup v2, ring buffers, BPF CO-RE)
 - **cgroup v2 unified hierarchy** mounted at `/sys/fs/cgroup`
 - **Root** or capabilities: `CAP_BPF` + `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`
 - **Build toolchain** (for compiling eBPF): `clang`, `llvm`, `libbpf-dev`
@@ -399,8 +399,8 @@ Requires **root** + an **eBPF-capable kernel**. Tests the full pipeline (eBPF lo
 make test-e2e
 
 # Run inside an LVH VM (recommended — works anywhere with KVM)
-make test-e2e-vm                          # Default kernel: 6.6-main
-LVH_KERNEL=5.15-main make test-e2e-vm    # Specific kernel version
+make test-e2e-vm                          # Default kernel: 6.6-20260310.122539
+LVH_KERNEL=5.15-20260310.122539 make test-e2e-vm    # Specific kernel version
 ```
 
 ### Run All Tests
@@ -430,10 +430,10 @@ CI is defined in `.github/workflows/ci.yml` and runs on every push and PR:
 | **Unit Tests** | `ubuntu-latest` | `go test ./internal/...` |
 | **Integration Tests** | `ubuntu-latest` | `sudo go test -tags=integration` |
 | **Build** | `ubuntu-latest` | `make generate build testbin testbin-e2e` → uploads artifacts |
-| **E2E (matrix)** | `ubuntu-latest` + LVH VM | Runs E2E in QEMU VMs (kernels: `6.6-main`, `5.15-main`) |
+| **E2E (matrix)** | `ubuntu-latest` + LVH VM | Runs E2E in QEMU VMs (kernels: `6.6`, `6.1`, `5.15`) |
 | **Lint** | `ubuntu-latest` | `golangci-lint` |
 
-The E2E matrix uses [cilium/little-vm-helper-action](https://github.com/cilium/little-vm-helper-action) to spin up ephemeral QEMU VMs with real kernels. To test against a new kernel version, add it to `matrix.kernel` in `ci.yml`.
+The E2E matrix uses [cilium/little-vm-helper](https://github.com/cilium/little-vm-helper) to spin up ephemeral QEMU VMs with real kernels. To test against a new kernel version, add it to `matrix.kernel` in `ci.yml`. Use date-stamped tags (e.g. `6.1-20260310.122539`); do not use `-main` tags.
 
 ---
 
@@ -497,7 +497,7 @@ Each event contains: `timestamp`, `pid`, `command`, `dst_ip`, `dst_port`, `rever
 |---------|-------|-----|
 | `permission denied` on `leashd run` | Needs root or BPF capabilities | Use `sudo` or grant `CAP_BPF + CAP_NET_ADMIN + CAP_SYS_ADMIN` |
 | `cgroup2 not mounted` | System uses cgroup v1 | Ensure cgroup v2 is at `/sys/fs/cgroup` |
-| `failed to load BPF program` | Kernel too old or missing BTF | Requires kernel 5.8+ with BTF support |
+| `failed to load BPF program` | Kernel too old or missing BTF | Requires kernel 5.8+ with `CONFIG_DEBUG_INFO_BTF=y` |
 | `make generate` fails | Missing clang/llvm | `sudo apt install clang llvm libbpf-dev` |
 | Integration tests fail without root | Build tag tests need `sudo -E` | Use `make test-int` (runs with sudo) |
 | E2E tests fail on non-eBPF kernel | Host kernel lacks eBPF support | Use `make test-e2e-vm` to run in a VM |

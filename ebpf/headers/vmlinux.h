@@ -133,6 +133,34 @@ struct __sk_buff {
 	__u32 local_port;
 };
 
+/* CO-RE struct skeletons for cgroup ID resolution -------------------------
+ *
+ * Only the fields accessed via BPF_CORE_READ are declared.  The BPF loader
+ * resolves actual offsets at runtime using the target kernel's BTF, so the
+ * struct layout here does NOT need to match the running kernel exactly —
+ * only the field *names* matter.
+ *
+ * Walk: task_struct → cgroups → dfl_cgrp → kn → id
+ *
+ * Requires: kernel 5.4+ (BTF) and CONFIG_DEBUG_INFO_BTF=y.
+ * kernfs_node.id changed from union to plain u64 in kernel 5.5.
+ */
+struct task_struct {
+	struct css_set *cgroups;
+} __attribute__((preserve_access_index));
+
+struct css_set {
+	struct cgroup *dfl_cgrp;
+} __attribute__((preserve_access_index));
+
+struct cgroup {
+	struct kernfs_node *kn;
+} __attribute__((preserve_access_index));
+
+struct kernfs_node {
+	__u64 id;
+} __attribute__((preserve_access_index));
+
 /* BPF map types ----------------------------------------------------------- */
 enum bpf_map_type {
 	BPF_MAP_TYPE_UNSPEC,

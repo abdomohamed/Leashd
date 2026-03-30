@@ -41,7 +41,7 @@ Build tags (`integration`, `e2e`) gate which tests compile. E2E tests call `make
 
 ### CI E2E: little-vm-helper (lvh)
 
-In CI, E2E tests run inside ephemeral QEMU VMs using [`cilium/little-vm-helper`](https://github.com/cilium/little-vm-helper) against a matrix of kernel versions (e.g. `6.6-20260310.122539`, `5.15-20260310.122539`). The flow:
+In CI, E2E tests run inside ephemeral QEMU VMs using [`cilium/little-vm-helper`](https://github.com/cilium/little-vm-helper) against a matrix of kernel versions (e.g. `6.6-20260310.122539`, `6.1-20260310.122539`, `5.15-20260310.122539`). The flow:
 
 1. `build` job: compiles `bin/leashd`, `connector`, and a static `tests/e2e/e2e.test` binary (`make testbin-e2e`) — uploads them as artifacts.
 2. `e2e` job (matrix): downloads artifacts, mounts workspace into VM at `/host`, runs `e2e.test` as root inside the VM.
@@ -94,6 +94,7 @@ The daemon runs five concurrent goroutines communicating via channels:
   - `tracked_cgroups` (hash): set of active cgroup IDs
   - `events` (ring buffer, 4 MiB): kernel → userspace event stream
 - `bpf2go` compiles `ebpf/leashd.c` into `internal/bpf/leashd_bpfel.go` / `leashd_bpfeb.go`
+- **Cgroup ID resolution**: kprobes use `bpf_get_current_task()` + CO-RE (`BPF_CORE_READ`) to walk `task_struct→cgroups→dfl_cgrp→kn→id` (works on 5.8+). The cgroup/skb program uses the direct `bpf_get_current_cgroup_id()` helper instead.
 
 ### Policy Engine (`internal/policy/engine.go`)
 
@@ -128,7 +129,7 @@ notifications: { webhook: url }
 ## Runtime Requirements
 
 - **Root or CAP_BPF + CAP_NET_ADMIN + CAP_SYS_ADMIN**
-- **Linux kernel 5.8+** (ring buffers, cgroup v2, LPM trie, BPF CO-RE)
+- **Linux kernel 5.8+** with `CONFIG_DEBUG_INFO_BTF=y` (ring buffers, cgroup v2, BPF CO-RE)
 - **cgroup v2 unified hierarchy** at `/sys/fs/cgroup` (checked at startup)
 - **Build toolchain**: clang, llvm, libbpf-dev (only for `make generate`)
 

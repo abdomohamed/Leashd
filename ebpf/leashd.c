@@ -53,6 +53,24 @@ struct {
 /* Helpers                                                               */
 /* ------------------------------------------------------------------ */
 
+/*
+ * get_cgroup_id_from_task - CO-RE cgroup ID resolution for kprobe programs.
+ *
+ * bpf_get_current_cgroup_id() is not available in kprobe programs on
+ * kernels before 6.4.  This helper uses bpf_get_current_task() (kprobe-safe
+ * since 4.8) and BPF_CORE_READ() to walk:
+ *
+ *   task_struct → cgroups → dfl_cgrp → kn → id
+ *
+ * CO-RE relocations are resolved at load time via the target kernel's BTF,
+ * so this works on any 5.8+ kernel with CONFIG_DEBUG_INFO_BTF=y.
+ */
+static __always_inline __u64 get_cgroup_id_from_task(void)
+{
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    return BPF_CORE_READ(task, cgroups, dfl_cgrp, kn, id);
+}
+
 static __always_inline __u8 lookup_verdict(__u32 dst_ip)
 {
     struct policy_lpm_key key = {
@@ -93,7 +111,7 @@ static __always_inline void emit_event(
 SEC("kprobe/tcp_v4_connect")
 int kprobe_tcp_connect(struct pt_regs *ctx)
 {
-    __u64 cgroup_id = bpf_get_current_cgroup_id();
+    __u64 cgroup_id = get_cgroup_id_from_task();
 
     /* Fast path: skip if this cgroup isn't tracked. */
     __u8 *tracked = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
@@ -127,7 +145,7 @@ int kprobe_tcp_connect(struct pt_regs *ctx)
 SEC("kprobe/ip4_datagram_connect")
 int kprobe_udp_connect(struct pt_regs *ctx)
 {
-    __u64 cgroup_id = bpf_get_current_cgroup_id();
+    __u64 cgroup_id = get_cgroup_id_from_task();
 
     __u8 *tracked = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
     if (!tracked)
@@ -162,7 +180,7 @@ int cgroup_skb_egress(struct __sk_buff *skb)
     if (skb->family != AF_INET)
         return 1; /* allow */
 
-    __u64 cgroup_id = bpf_get_current_cgroup_id();
+    __u64 cgroup_id = get_cgroup_id_from_task();
     __u8 *tracked   = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
     if (!tracked)
         return 1; /* allow — not a tracked cgroup */
