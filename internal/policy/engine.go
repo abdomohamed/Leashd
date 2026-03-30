@@ -139,13 +139,18 @@ func matchesLPM(ip net.IP, entry LPMEntry) bool {
 	if v4 == nil {
 		return false
 	}
-	ipInt := binary.BigEndian.Uint32(v4)
 	if entry.PrefixLen == 0 {
 		return true
 	}
 	if entry.PrefixLen > 32 {
 		return false
 	}
+	// entry.IP is LittleEndian-encoded (memory bytes = network byte order).
+	// Restore network-byte-order bytes so standard IP masking works correctly.
+	var entryBytes [4]byte
+	binary.LittleEndian.PutUint32(entryBytes[:], entry.IP)
+	ipInt := binary.BigEndian.Uint32(v4)
+	entryInt := binary.BigEndian.Uint32(entryBytes[:])
 	mask := ^uint32(0) << (32 - entry.PrefixLen)
-	return (ipInt & mask) == (entry.IP & mask)
+	return (ipInt & mask) == (entryInt & mask)
 }
