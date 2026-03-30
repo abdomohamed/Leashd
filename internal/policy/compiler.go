@@ -102,9 +102,14 @@ func ipToLPMEntry(ip net.IP, prefixLen int, verdict uint8, ruleID string) (LPMEn
 	if v4 == nil {
 		return LPMEntry{}, fmt.Errorf("only IPv4 is supported (got %s)", ip)
 	}
+	// Store the IP as a LittleEndian uint32 so its in-memory byte layout on
+	// x86-64 matches network byte order (e.g. 127.0.0.1 → value 0x0100007f,
+	// memory bytes [7f,00,00,01]).  The BPF LPM trie matches from the
+	// lowest-address byte of the key's IP field, which must be the most-
+	// significant network octet for prefix matching to be correct.
 	return LPMEntry{
 		PrefixLen: uint32(prefixLen),
-		IP:        binary.BigEndian.Uint32(v4),
+		IP:        binary.LittleEndian.Uint32(v4),
 		Verdict:   verdict,
 		RuleID:    ruleID,
 	}, nil

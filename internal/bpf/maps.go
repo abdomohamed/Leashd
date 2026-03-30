@@ -71,7 +71,8 @@ func (m *Maps) RemoveTrackedCgroup(cgroupID uint64) error {
 }
 
 func uint32ToIP(n uint32) string {
+	// n is LittleEndian-encoded: LSB of uint32 = first network octet.
 	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, n)
+	binary.LittleEndian.PutUint32(b, n)
 	return fmt.Sprintf("%d.%d.%d.%d", b[0], b[1], b[2], b[3])
 }

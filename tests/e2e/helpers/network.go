@@ -4,6 +4,7 @@ package helpers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -77,7 +78,15 @@ func SpawnConnector(t *testing.T, sess *LeashSession, addr string) error {
 	}
 
 	if err := run(true); err != nil {
-		// If CgroupFD approach failed, try without it.
+		// Only retry if cmd.Start() itself failed (e.g. kernel doesn't support
+		// UseCgroupFD). If the connector process ran but exited non-zero (connection
+		// refused/blocked by policy), that is the real verdict — don't re-run outside
+		// the cgroup, which would bypass BPF enforcement.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return err
+		}
+		t.Logf("CgroupFD start failed (%v) — retrying with cgroup.procs only", err)
 		return run(false)
 	}
 	return nil

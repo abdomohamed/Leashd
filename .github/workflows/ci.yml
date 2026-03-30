@@ -102,7 +102,14 @@ jobs:
             set -ex
             uname -r
             cd /mnt
-            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s
+            ./tests/e2e/e2e.test -test.v -test.count=1 -test.timeout 300s || {
+              echo "=== E2E FAILED — dumping diagnostic artifacts ==="
+              find /tmp -name "events.jsonl" 2>/dev/null | while read f; do
+                echo "--- $f ---"; cat "$f" 2>/dev/null || true
+              done
+              find /sys/fs/cgroup/leashd -maxdepth 3 2>/dev/null || true
+              exit 1
+            }
 
   lint:
     name: Lint

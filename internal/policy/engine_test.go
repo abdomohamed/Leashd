@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"encoding/binary"
 	"log/slog"
 	"net"
 	"testing"
@@ -99,6 +100,6 @@ func TestUpdatePolicy(t *testing.T) {
 }
 
 func ipToUint32(s string) uint32 {
-	ip := net.ParseIP(s).To4()
-	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+	// Must match ipToLPMEntry encoding: LittleEndian uint32 so memory = network bytes.
+	return binary.LittleEndian.Uint32(net.ParseIP(s).To4())
 }
