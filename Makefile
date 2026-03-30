@@ -5,7 +5,7 @@ BPF_CFLAGS  := -O2 -g -Wall -Wno-unused-value -Wno-pointer-sign \
 VMLINUX     := ebpf/headers/vmlinux.h
 BINARY      := bin/leashd
 CONNECTOR   := tests/e2e/helpers/connector/connector
-LVH_KERNEL  ?= 6.6-main
+LVH_KERNEL  ?= 6.6-20260310.122539
 
 .PHONY: all vmlinux generate build test test-int test-e2e test-e2e-vm test-all testbin testbin-e2e devsetup clean lint
 

@@ -2,13 +2,13 @@
 # Run E2E tests inside a local LVH (little-vm-helper) QEMU VM.
 #
 # Environment variables:
-#   LVH_KERNEL   kernel version tag  (default: 6.6-main)
+#   LVH_KERNEL   kernel version tag  (default: 6.6-20260310.122539)
 #   LVH_SSH_PORT host SSH port        (default: 2222)
 #   LVH_TIMEOUT  test timeout in sec  (default: 300)
 #   LVH_DATA     image cache dir      (default: ~/.cache/lvh)
 set -euo pipefail
 
-KERNEL="${LVH_KERNEL:-6.6-main}"
+KERNEL="${LVH_KERNEL:-6.6-20260310.122539}"
 SSH_PORT="${LVH_SSH_PORT:-2222}"
 TIMEOUT="${LVH_TIMEOUT:-300}"
 LVH_DATA="${LVH_DATA:-${HOME}/.cache/lvh}"

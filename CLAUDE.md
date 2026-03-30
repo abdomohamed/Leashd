@@ -41,22 +41,22 @@ Build tags (`integration`, `e2e`) gate which tests compile. E2E tests call `make
 
 ### CI E2E: little-vm-helper (lvh)
 
-In CI, E2E tests run inside ephemeral QEMU VMs using [`cilium/little-vm-helper-action`](https://github.com/cilium/little-vm-helper-action) against a matrix of kernel versions (`6.6-main`, `5.15-main`). The flow:
+In CI, E2E tests run inside ephemeral QEMU VMs using [`cilium/little-vm-helper`](https://github.com/cilium/little-vm-helper) against a matrix of kernel versions (e.g. `6.6-20260310.122539`, `5.15-20260310.122539`). The flow:
 
 1. `build` job: compiles `bin/leashd`, `connector`, and a static `tests/e2e/e2e.test` binary (`make testbin-e2e`) — uploads them as artifacts.
 2. `e2e` job (matrix): downloads artifacts, mounts workspace into VM at `/host`, runs `e2e.test` as root inside the VM.
 
 The test binary's path-walking discovery (`bin/leashd`, `tests/e2e/helpers/connector/connector`) works automatically when the binary is executed from `/host`.
 
-To add a kernel to the matrix, add it to `matrix.kernel` in `.github/workflows/ci.yml`. Available versions: `quay.io/lvh-images/kind:{version}-main` (e.g. `6.1-main`, `5.10-main`).
+To add a kernel to the matrix, add it to `matrix.kernel` in `.github/workflows/ci.yml`. Use date-stamped tags from `quay.io/lvh-images/kind` (e.g. `6.1-20260310.122539`). Do **not** use `-main` tags — they cause a filename mismatch in the LVH action's image-name derivation step.
 
 ### Local E2E with LVH VM
 
 Run E2E tests locally inside an LVH VM (requires KVM — available in the devcontainer):
 
 ```bash
-make test-e2e-vm              # default kernel: 6.6-main
-LVH_KERNEL=5.15-main make test-e2e-vm   # specific kernel
+make test-e2e-vm              # default kernel: 6.6-20260310.122539
+LVH_KERNEL=5.15-20260310.122539 make test-e2e-vm   # specific kernel
 ```
 
 `make test-e2e-vm` builds all binaries, boots `quay.io/lvh-images/kind:$LVH_KERNEL` via QEMU, SSHes in (empty root password), and runs the pre-compiled `e2e.test` binary from the mounted workspace (`/host`). VM images are cached in `~/.cache/lvh`. First run pulls the image (~1–2 GB). Console log: `/tmp/lvh-<kernel>.log`.
