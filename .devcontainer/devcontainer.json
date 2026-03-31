@@ -5,6 +5,7 @@
     "--privileged",
     "--network=host",
     "--pid=host",
+    "--cgroupns=host",
     "-v", "/sys/fs/cgroup:/sys/fs/cgroup",
     "-v", "/sys/kernel/btf:/sys/kernel/btf:ro",
     "-v", "/sys/kernel/debug:/sys/kernel/debug:ro",

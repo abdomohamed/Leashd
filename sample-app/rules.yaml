@@ -1,0 +1,45 @@
+version: "1"
+
+project:
+  name: "sample-app"
+  description: "Rules for the leashd sample test application"
+
+defaults:
+  action: block
+  log: true
+
+rules:
+  # ── ALLOW rules ───────────────────────────────────────────
+  - id: pypi
+    comment: "Python package index"
+    domains: ["pypi.org", "files.pythonhosted.org"]
+    ports: [443, 80]
+    action: allow
+
+  - id: google-apis
+    comment: "Wildcard — all googleapis.com subdomains"
+    domains: ["*.googleapis.com"]
+    action: allow
+
+  - id: loopback
+    comment: "Allow all loopback traffic"
+    cidrs: ["127.0.0.0/8"]
+    action: allow
+
+  # ── BLOCK rules ───────────────────────────────────────────
+  - id: block-bad-ip
+    comment: "Block a known-bad IP (TEST-NET-3, RFC 5737)"
+    ips: ["203.0.113.42"]
+    ports: [443]
+    action: block
+
+  - id: block-test-net
+    comment: "Block TEST-NET-2 range (RFC 5737)"
+    cidrs: ["198.51.100.0/24"]
+    action: block
+
+  # ── Everything else falls through to defaults.action: warn ─
+
+notifications:
+  terminal: true
+  json_log: ".leashd/events.jsonl"

@@ -29,6 +29,7 @@ Any connection not matching a rule in `rules.yaml` is logged, warned, or blocked
 - [Testing](#testing)
 - [CI Pipeline](#ci-pipeline)
 - [Debugging](#debugging)
+- [Troubleshooting](#common-issues)
 - [Key Gotchas](#key-gotchas)
 - [License](#license)
 
@@ -50,28 +51,7 @@ Leashd gives you a per-project firewall that:
 
 ## How It Works
 
-```
-                      ┌──────────────────────────────────────────┐
-                      │              Linux Kernel                 │
-                      │                                          │
-  child process ──►   │  cgroup/skb egress filter (per-cgroup)   │ ──► network
-  (npm install)       │      ▲           ▲                       │
-                      │      │           │                       │
-                      │  kprobe:       kprobe:                   │
-                      │  tcp_v4_connect  ip4_datagram_connect    │
-                      │      │           │                       │
-                      │      └─── ring buffer ───┘               │
-                      └──────────────┬───────────────────────────┘
-                                     │ events
-                                     ▼
-                      ┌──────────────────────────────────────────┐
-                      │           Leashd Daemon (userspace)      │
-                      │                                          │
-                      │  policy engine → verdict → alert output  │
-                      │  rules watcher → hot-reload              │
-                      │  DNS refresher → IP cache updates        │
-                      └──────────────────────────────────────────┘
-```
+![How Leashd Works](docs/how-it-works.gif)
 
 1. `leashd run` creates an isolated **cgroup v2** and places the child process inside it.
 2. **eBPF kprobes** on `tcp_v4_connect` and `ip4_datagram_connect` emit events to a ring buffer whenever the child (or any of its descendants) makes an outbound connection.
@@ -501,6 +481,43 @@ Each event contains: `timestamp`, `pid`, `command`, `dst_ip`, `dst_port`, `rever
 | `make generate` fails | Missing clang/llvm | `sudo apt install clang llvm libbpf-dev` |
 | Integration tests fail without root | Build tag tests need `sudo -E` | Use `make test-int` (runs with sudo) |
 | E2E tests fail on non-eBPF kernel | Host kernel lacks eBPF support | Use `make test-e2e-vm` to run in a VM |
+| Connections not blocked (Docker/devcontainer) | Container has a private cgroup namespace | See [Cgroup namespace fix](#cgroup-namespace-fix-dockerdevcontainers) below |
+
+#### Cgroup namespace fix (Docker/devcontainers)
+
+If leashd loads and attaches without errors but connections are never blocked, the child process is likely **not being placed into the leashd cgroup**. This happens when running inside a Docker container (including VS Code devcontainers and GitHub Codespaces) that uses a **private cgroup namespace** — the default for Docker.
+
+**How to diagnose:**
+
+```bash
+# Check if you're in a container with a separate cgroup namespace
+readlink /proc/self/ns/cgroup     # e.g. cgroup:[4026532871]
+sudo readlink /proc/1/ns/cgroup   # e.g. cgroup:[4026531835]  ← different = problem
+```
+
+If the two IDs differ, your container has its own cgroup namespace. The kernel sees the process PIDs and the cgroup filesystem in different namespaces, so writing to `cgroup.procs` fails with `ENOENT`.
+
+**Fix:** Add `--cgroupns=host` to your Docker run arguments. For devcontainers, update `devcontainer.json`:
+
+```json
+"runArgs": [
+    "--privileged",
+    "--pid=host",
+    "--cgroupns=host",
+    "-v", "/sys/fs/cgroup:/sys/fs/cgroup",
+    ...
+]
+```
+
+Then **rebuild the container**. You can verify the fix worked:
+
+```bash
+# Both should now show the same namespace ID
+readlink /proc/self/ns/cgroup
+sudo readlink /proc/1/ns/cgroup
+```
+
+> **Why this happens:** Docker defaults to `--cgroupns=private`, which creates an isolated cgroup namespace for the container. Even with `--privileged` and a bind-mount of `/sys/fs/cgroup`, the kernel rejects PID writes to `cgroup.procs` when the writer's cgroup namespace doesn't match. Using `--cgroupns=host` makes the container share the host's cgroup namespace, allowing leashd to create cgroups and place child processes into them normally.
 
 ---
 

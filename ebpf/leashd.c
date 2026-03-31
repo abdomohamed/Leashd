@@ -180,10 +180,12 @@ int cgroup_skb_egress(struct __sk_buff *skb)
     if (skb->family != AF_INET)
         return 1; /* allow */
 
-    __u64 cgroup_id = get_cgroup_id_from_task();
-    __u8 *tracked   = bpf_map_lookup_elem(&tracked_cgroups, &cgroup_id);
-    if (!tracked)
-        return 1; /* allow — not a tracked cgroup */
+    /*
+     * No need to check tracked_cgroups here: this program is attached to
+     * the specific leashd session cgroup, so it only sees packets from
+     * processes inside that cgroup.  (The kprobes ARE system-wide and
+     * need the tracked_cgroups check; this program does not.)
+     */
 
     /* Read destination IP from the packet. */
     __u32 dst_ip = 0;

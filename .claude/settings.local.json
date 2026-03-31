@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:ebpfchirp.substack.com)",
+      "WebFetch(domain:keploy.io)",
+      "WebFetch(domain:tetragon.io)",
+      "WebFetch(domain:docs.cilium.io)",
+      "WebFetch(domain:inspektor-gadget.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:sookocheff.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:who.ldelossa.is)",
+      "WebFetch(domain:quay.io)",
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(make test-all:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(lvh images:*)",
+      "Bash(make test-e2e-vm:*)",
+      "Bash(dpkg -l)",
+      "Read(//usr/bin/**)",
+      "Bash(apt-cache search:*)",
+      "Bash(apt-get update:*)",
+      "Bash(grep:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "code-simplifier@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true
+  },
+  "prefersReducedMotion": false
+}

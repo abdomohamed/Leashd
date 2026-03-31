@@ -141,3 +141,4 @@ notifications: { webhook: url }
 - **Event channel overflow drops events silently**: `eventCh`/`enrichCh` backpressure is not propagated.
 - **`sudo -E` required for integration/e2e tests**: child processes need inherited PATH/GOPATH/HOME.
 - **`make clean` removes generated BPF objects**: `make generate` (requires clang) must be re-run after.
+- **Devcontainer requires `--cgroupns=host`**: Docker defaults to a private cgroup namespace which prevents cgroup process placement. The devcontainer.json already includes this flag.

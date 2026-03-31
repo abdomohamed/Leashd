@@ -4,6 +4,7 @@ package bpf
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 
@@ -82,23 +83,41 @@ func (l *Loader) AttachKprobes() error {
 }
 
 // AttachCgroup attaches the cgroup/skb egress filter to the cgroup at cgroupPath.
-func (l *Loader) AttachCgroup(cgroupPath string) (link.Link, error) {
+func (l *Loader) AttachCgroup(cgroupPath string) (io.Closer, error) {
 	cgroupFD, err := os.Open(cgroupPath)
 	if err != nil {
 		return nil, fmt.Errorf("open cgroup dir %s: %w", cgroupPath, err)
 	}
-	defer func() { _ = cgroupFD.Close() }()
 
-	lnk, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    cgroupPath,
-		Attach:  ebpf.AttachCGroupInetEgress,
+	// Use the raw BPF_PROG_ATTACH syscall instead of BPF_LINK_CREATE.
+	// On some kernels (e.g. WSL2), BPF_LINK_CREATE for cgroup/skb succeeds
+	// but the program never runs. The legacy attach API is more reliable.
+	err = link.RawAttachProgram(link.RawAttachProgramOptions{
+		Target:  int(cgroupFD.Fd()),
 		Program: l.objs.CgroupSkbEgress,
+		Attach:  ebpf.AttachCGroupInetEgress,
 	})
 	if err != nil {
+		cgroupFD.Close()
 		return nil, fmt.Errorf("attach cgroup/skb to %s: %w", cgroupPath, err)
 	}
 	l.logger.Info("cgroup/skb egress filter attached", "cgroup", cgroupPath)
-	return lnk, nil
+	return &rawCgroupLink{fd: cgroupFD, prog: l.objs.CgroupSkbEgress}, nil
+}
+
+// rawCgroupLink wraps a legacy BPF_PROG_ATTACH so it can be detached on Close.
+type rawCgroupLink struct {
+	fd   *os.File
+	prog *ebpf.Program
+}
+
+func (r *rawCgroupLink) Close() error {
+	defer r.fd.Close()
+	return link.RawDetachProgram(link.RawDetachProgramOptions{
+		Target:  int(r.fd.Fd()),
+		Program: r.prog,
+		Attach:  ebpf.AttachCGroupInetEgress,
+	})
 }
 
 // NewRingBufReader returns a reader for the events ring buffer.
