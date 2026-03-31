@@ -13,6 +13,7 @@ make build        # Generate BPF objects + build binary (requires clang, llvm, l
 make generate     # Re-run bpf2go to regenerate internal/bpf/leashd_bpf*.go from ebpf/leashd.c
 make vmlinux      # Regenerate ebpf/headers/vmlinux.h from running kernel (rarely needed)
 make lint         # Run golangci-lint
+make release-local # GoReleaser snapshot build (no publish, artifacts in dist/)
 make clean        # Remove binaries and generated eBPF objects
 ```
 
@@ -62,6 +63,22 @@ LVH_KERNEL=5.15-20260310.122539 make test-e2e-vm   # specific kernel
 `make test-e2e-vm` builds all binaries, boots `quay.io/lvh-images/kind:$LVH_KERNEL` via QEMU, SSHes in (empty root password), and runs the pre-compiled `e2e.test` binary from the mounted workspace (`/host`). VM images are cached in `~/.cache/lvh`. First run pulls the image (~1–2 GB). Console log: `/tmp/lvh-<kernel>.log`.
 
 To install the tools in an existing session: `make devsetup`.
+
+## Releases
+
+Releases are automated via [GoReleaser](https://goreleaser.com/) and the `.github/workflows/release.yml` workflow.
+
+```bash
+# Create a release (triggers CI to build + publish)
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+- Pushing a `v*` tag triggers the release workflow: installs BPF deps → `make generate` → GoReleaser builds Linux amd64 binary → publishes GitHub Release with auto-generated release notes.
+- Release notes are grouped by commit type (feat/fix/docs/test/chore) using conventional commit prefixes.
+- `make release-local` runs a snapshot build locally (no publish).
+- Config: `.goreleaser.yaml`. Version is injected via `-ldflags` into `internal/version.Version`.
+- Update `CHANGELOG.md` when preparing a release.
 
 ## Architecture
 

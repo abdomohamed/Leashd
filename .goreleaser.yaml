@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - make generate
+
+builds:
+  - id: leashd
+    main: ./cmd/leashd/
+    binary: leashd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X github.com/abdotalema/leashd/internal/version.Version={{ .Version }}
+
+archives:
+  - id: leashd-archive
+    ids:
+      - leashd
+    formats:
+      - tar.gz
+    name_template: "leashd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: abdotalema
+    name: leashd
+  draft: false
+  prerelease: auto
+  name_template: "Leashd {{ .Tag }}"
+  header: |
+    ## Leashd {{ .Tag }}
+
+    Per-project eBPF network firewall for Linux.
+
+    ### Installation
+
+    ```bash
+    # Download and extract
+    tar -xzf leashd_{{ .Version }}_linux_amd64.tar.gz
+    sudo mv leashd /usr/local/bin/
+
+    # Verify
+    leashd --version
+    ```
+
+    See the [README](https://github.com/abdotalema/leashd#getting-started) for usage instructions.
+  footer: |
+    **Full Changelog**: https://github.com/abdotalema/leashd/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "📚 Documentation"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "🧪 Tests"
+      regexp: '^.*?test(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "🔧 Maintenance"
+      regexp: '^.*?(chore|ci|build|refactor)(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: "Other Changes"
+      order: 999
+  filters:
+    exclude:
+      - "^Merge "
+      - "^merge "

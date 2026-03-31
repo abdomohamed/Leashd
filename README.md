@@ -23,11 +23,13 @@ Any connection not matching a rule in `rules.yaml` is logged, warned, or blocked
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
+- [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
 - [CLI Reference](#cli-reference)
 - [Testing](#testing)
 - [CI Pipeline](#ci-pipeline)
+- [Releases](#releases)
 - [Debugging](#debugging)
 - [Troubleshooting](#common-issues)
 - [Key Gotchas](#key-gotchas)
@@ -153,9 +155,39 @@ Verdicts: `allow` (0), `warn` (1), `block` (2)
 ├── testdata/            # Test fixtures (rules.yaml)
 ├── scripts/             # run-e2e-vm.sh (LVH VM runner)
 ├── .devcontainer/       # Codespace / devcontainer config
-├── .github/workflows/   # CI pipeline (ci.yml)
-└── Makefile             # Build, test, lint targets
+├── .github/workflows/   # CI pipeline (ci.yml) + release automation (release.yml)
+└── Makefile             # Build, test, lint, release targets
 ```
+
+---
+
+## Installation
+
+### Pre-built Binary (Recommended)
+
+Download the latest release from the [GitHub Releases](https://github.com/abdotalema/leashd/releases) page:
+
+```bash
+# Download the latest release (replace VERSION with the desired version, e.g. 0.1.0)
+curl -LO https://github.com/abdotalema/leashd/releases/download/v${VERSION}/leashd_${VERSION}_linux_amd64.tar.gz
+
+# Verify the checksum
+curl -LO https://github.com/abdotalema/leashd/releases/download/v${VERSION}/checksums.txt
+sha256sum --check --ignore-missing checksums.txt
+
+# Extract and install
+tar -xzf leashd_${VERSION}_linux_amd64.tar.gz
+sudo mv leashd /usr/local/bin/
+
+# Verify
+leashd --version
+```
+
+> **Note:** Pre-built binaries include the compiled eBPF objects — no need to install clang/llvm for running leashd. The build toolchain is only required if you want to build from source.
+
+### Build from Source
+
+See [Getting Started](#getting-started) below for building from source.
 
 ---
 
@@ -414,6 +446,38 @@ CI is defined in `.github/workflows/ci.yml` and runs on every push and PR:
 | **Lint** | `ubuntu-latest` | `golangci-lint` |
 
 The E2E matrix uses [cilium/little-vm-helper](https://github.com/cilium/little-vm-helper) to spin up ephemeral QEMU VMs with real kernels. To test against a new kernel version, add it to `matrix.kernel` in `ci.yml`. Use date-stamped tags (e.g. `6.1-20260310.122539`); do not use `-main` tags.
+
+---
+
+## Releases
+
+Leashd uses [GoReleaser](https://goreleaser.com/) to automate binary builds and GitHub Releases.
+
+### How to create a release
+
+```bash
+# Tag the release (follows semantic versioning)
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Pushing a `v*` tag triggers the [release workflow](.github/workflows/release.yml), which:
+
+1. Installs BPF build dependencies (clang, llvm, libbpf-dev)
+2. Generates eBPF objects via `make generate`
+3. Cross-compiles the `leashd` binary (Linux amd64)
+4. Creates a GitHub Release with auto-generated release notes (grouped by commit type)
+5. Uploads the binary archive (`.tar.gz`) and checksum file
+
+Release notes are automatically generated from commit history between tags, grouped into categories: Features, Bug Fixes, Documentation, Tests, and Maintenance. Use [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat:`, `fix:`, `docs:`) for best results.
+
+### Local dry-run
+
+Test the release process locally without publishing:
+
+```bash
+make release-local    # Builds artifacts in dist/ without publishing
+```
 
 ---
 

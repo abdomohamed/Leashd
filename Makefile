@@ -7,7 +7,7 @@ BINARY      := bin/leashd
 CONNECTOR   := tests/e2e/helpers/connector/connector
 LVH_KERNEL  ?= 6.6-20260310.122539
 
-.PHONY: all vmlinux generate build test test-int test-e2e test-e2e-vm test-all testbin testbin-e2e devsetup clean lint
+.PHONY: all vmlinux generate build test test-int test-e2e test-e2e-vm test-all testbin testbin-e2e devsetup clean lint release-local
 
 all: generate build
 
@@ -66,10 +66,17 @@ devsetup:
 	@echo "==> Installing VM testing tools (QEMU, sshpass, lvh)..."
 	sudo apt-get install -y --no-install-recommends qemu-system-x86 sshpass
 	CGO_ENABLED=0 GOTOOLCHAIN=auto go install github.com/cilium/little-vm-helper/cmd/lvh@v0.0.28
-	@echo "==> VM tools ready. Run: make test-e2e-vm"
+	@echo "==> Installing GoReleaser..."
+	CGO_ENABLED=0 GOTOOLCHAIN=auto go install github.com/goreleaser/goreleaser/v2@latest
+	@echo "==> Dev tools ready. Run: make test-e2e-vm"
 
 lint:
 	golangci-lint run ./...
+
+release-local:
+	@echo "==> Running GoReleaser in snapshot mode (no publish)..."
+	goreleaser release --snapshot --clean
+	@echo "    Artifacts in dist/"
 
 clean:
 	rm -f $(BINARY) $(CONNECTOR) tests/e2e/e2e.test
