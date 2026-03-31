@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"sort"
 
 	"github.com/abdotalema/leashd/internal/config"
 )
@@ -117,6 +118,13 @@ func Compile(cfg *config.Config, resolvedIPs map[string][]net.IP, dnsServerIPs [
 			// by the policy engine via reverse DNS.
 		}
 	}
+
+	// Sort entries by descending prefix length so the userspace Engine
+	// (which does a linear scan) checks more-specific entries first, matching
+	// the kernel LPM trie's longest-prefix-match semantics.
+	sort.SliceStable(policy.Entries, func(i, j int) bool {
+		return policy.Entries[i].PrefixLen > policy.Entries[j].PrefixLen
+	})
 
 	return policy, nil
 }

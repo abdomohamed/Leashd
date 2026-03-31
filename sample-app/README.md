@@ -24,6 +24,7 @@ sudo ./bin/leashd run --dir sample-app -- python3 sample-app/app.py
 | **Warn**  | example.com         | No matching rule → default action           |
 | **Block** | 203.0.113.42:443    | Matched by `block-bad-ip` rule              |
 | **Block** | 198.51.100.1:80     | Matched by `block-test-net` CIDR rule       |
+| **Block** | docs.litellm.ai     | Matched by `block-litellm` rule             |
 
 ## Options
 

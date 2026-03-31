@@ -23,17 +23,16 @@ func TestCompileExactIP(t *testing.T) {
 	if len(p.Entries) != 3 {
 		t.Fatalf("expected 3 entries (1 rule + 2 catch-all), got %d", len(p.Entries))
 	}
-	// First two entries are the catch-all defaults.
-	if p.Entries[0].PrefixLen != 1 || p.Entries[1].PrefixLen != 1 {
-		t.Errorf("expected catch-all prefixlen 1, got %d and %d", p.Entries[0].PrefixLen, p.Entries[1].PrefixLen)
-	}
-	// Third entry is the explicit IP rule.
-	e := p.Entries[2]
+	// Entries are sorted by descending prefix length: /32 first, /1 last.
+	e := p.Entries[0]
 	if e.PrefixLen != 32 {
 		t.Errorf("expected prefixlen 32 for exact IP, got %d", e.PrefixLen)
 	}
 	if e.Verdict != VerdictAllow {
 		t.Errorf("expected ALLOW verdict, got %d", e.Verdict)
+	}
+	if p.Entries[1].PrefixLen != 1 || p.Entries[2].PrefixLen != 1 {
+		t.Errorf("expected catch-all prefixlen 1, got %d and %d", p.Entries[1].PrefixLen, p.Entries[2].PrefixLen)
 	}
 }
 
@@ -52,7 +51,8 @@ func TestCompileCIDR(t *testing.T) {
 	if len(p.Entries) != 3 {
 		t.Fatalf("expected 3 entries (1 CIDR + 2 catch-all), got %d", len(p.Entries))
 	}
-	e := p.Entries[2] // skip catch-all pair at indices 0-1
+	// Sorted: /8 before /1 catch-alls.
+	e := p.Entries[0]
 	if e.PrefixLen != 8 {
 		t.Errorf("expected prefixlen 8 for /8 CIDR, got %d", e.PrefixLen)
 	}
@@ -76,8 +76,8 @@ func TestCompileResolvedDomain(t *testing.T) {
 	if len(p.Entries) != 4 {
 		t.Errorf("expected 4 entries (2 resolved IPs + 2 catch-all), got %d", len(p.Entries))
 	}
-	// Skip catch-all pair at indices 0-1; verify the domain entries.
-	for _, e := range p.Entries[2:] {
+	// Sorted: /32 domain entries first, /1 catch-alls last.
+	for _, e := range p.Entries[:2] {
 		if e.Verdict != VerdictAllow {
 			t.Errorf("expected ALLOW verdict for pypi.org IP, got %d", e.Verdict)
 		}
@@ -100,7 +100,8 @@ func TestCompileDefaultVerdict(t *testing.T) {
 	if len(p.Entries) < 2 {
 		t.Fatal("expected at least the 2 catch-all entries")
 	}
-	for i, catchAll := range p.Entries[:2] {
+	// With no other rules, catch-alls are the only entries (both /1).
+	for i, catchAll := range p.Entries {
 		if catchAll.PrefixLen != 1 {
 			t.Errorf("catch-all[%d] prefixLen = %d, want 1", i, catchAll.PrefixLen)
 		}
@@ -147,7 +148,8 @@ func TestCompileDNSServerIPs(t *testing.T) {
 	if len(p.Entries) != 3 {
 		t.Fatalf("expected 3 entries (2 catch-all + 1 DNS), got %d", len(p.Entries))
 	}
-	dnsEntry := p.Entries[2]
+	// Sorted: /32 DNS entry first, /1 catch-alls last.
+	dnsEntry := p.Entries[0]
 	if dnsEntry.PrefixLen != 32 {
 		t.Errorf("DNS entry prefixLen = %d, want 32", dnsEntry.PrefixLen)
 	}

@@ -83,7 +83,7 @@ TARGETS = {
             "label": "LiteLLM API",
             "kind": "http",
             "url": "https://docs.litellm.ai/",
-            "description": "No matching rule — default block",
+            "description": "Blocked by 'block-litellm' rule",
         },
     ],
 }

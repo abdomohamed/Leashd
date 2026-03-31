@@ -5,7 +5,7 @@ project:
   description: "Rules for the leashd sample test application"
 
 defaults:
-  action: block
+  action: warn
   log: true
 
 rules:
@@ -36,6 +36,11 @@ rules:
   - id: block-test-net
     comment: "Block TEST-NET-2 range (RFC 5737)"
     cidrs: ["198.51.100.0/24"]
+    action: block
+
+  - id: block-litellm
+    comment: "Block LiteLLM docs site"
+    domains: ["docs.litellm.ai"]
     action: block
 
   # ── Everything else falls through to defaults.action: warn ─
