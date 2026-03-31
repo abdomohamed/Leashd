@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "==> Fixing apt repository keys..."
-# Refresh the Yarn signing key from the Ubuntu keyserver (key rotated in 2026)
-gpg --no-tty --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys 62D54FD4003F6525 2>/dev/null || true
-gpg --no-tty --batch --export 62D54FD4003F6525 > /usr/share/keyrings/yarn-archive-keyring.gpg 2>/dev/null || true
+echo "==> Cleaning up unused apt repos..."
+# The base devcontainer image ships a Yarn repo whose GPG key rotates
+# frequently, breaking apt-get update. This project doesn't use Yarn,
+# so remove the source to avoid the issue entirely.
+rm -f /etc/apt/sources.list.d/yarn.list
 
 echo "==> Installing eBPF toolchain..."
 apt-get update -qq
