@@ -31,16 +31,17 @@ type EnrichedEvent struct {
 
 // Daemon orchestrates all goroutines for a leashd run session.
 type Daemon struct {
-	cfg        *config.Config
-	cfgPath    string
-	projectDir string
-	loader     *bpf.Loader
-	resolver   *ldns.Resolver
-	engine     *policy.Engine
-	dispatcher *Dispatcher
-	cgroupMgr  *cgroup.Manager
-	ipcServer  *ipc.Server
-	broker     *ipc.Broker
+	cfg          *config.Config
+	cfgPath      string
+	projectDir   string
+	loader       *bpf.Loader
+	resolver     *ldns.Resolver
+	engine       *policy.Engine
+	dispatcher   *Dispatcher
+	cgroupMgr    *cgroup.Manager
+	ipcServer    *ipc.Server
+	broker       *ipc.Broker
+	dnsServerIPs []net.IP
 
 	eventCh  chan bpf.ConnectEvent
 	enrichCh chan EnrichedEvent
@@ -64,6 +65,7 @@ func New(
 	engine *policy.Engine,
 	dispatcher *Dispatcher,
 	cgroupMgr *cgroup.Manager,
+	dnsServerIPs []net.IP,
 	logger *slog.Logger,
 ) (*Daemon, error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -79,15 +81,16 @@ func New(
 	srv.SetBroker(broker)
 
 	d := &Daemon{
-		cfgPath:    cfgPath,
-		projectDir: projectDir,
-		loader:     loader,
-		resolver:   resolver,
-		engine:     engine,
-		dispatcher: dispatcher,
-		cgroupMgr:  cgroupMgr,
-		ipcServer:  srv,
-		broker:     broker,
+		cfgPath:      cfgPath,
+		projectDir:   projectDir,
+		loader:       loader,
+		resolver:     resolver,
+		engine:       engine,
+		dispatcher:   dispatcher,
+		cgroupMgr:    cgroupMgr,
+		dnsServerIPs: dnsServerIPs,
+		ipcServer:    srv,
+		broker:       broker,
 		eventCh:    make(chan bpf.ConnectEvent, 4096),
 		enrichCh:   make(chan EnrichedEvent, 1024),
 		logger:     logger,
@@ -219,7 +222,7 @@ func (d *Daemon) reloadPolicy() {
 	}
 
 	ver := int(d.policyVer.Add(1))
-	compiled, err := policy.Compile(cfg, resolvedIPs, ver)
+	compiled, err := policy.Compile(cfg, resolvedIPs, d.dnsServerIPs, ver)
 	if err != nil {
 		d.logger.Error("hot-reload failed: compile error (old policy retained)", "error", err)
 		return

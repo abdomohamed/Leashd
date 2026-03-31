@@ -34,7 +34,9 @@ type CompiledPolicy struct {
 // a list of LPMEntry values ready to be loaded into the kernel BPF policy map.
 //
 // resolvedIPs maps domain name → []net.IP (from the DNS resolver).
-func Compile(cfg *config.Config, resolvedIPs map[string][]net.IP, version int) (*CompiledPolicy, error) {
+// dnsServerIPs are system nameservers that receive synthetic allow entries so
+// child-process DNS resolution works even when defaults.action is "block".
+func Compile(cfg *config.Config, resolvedIPs map[string][]net.IP, dnsServerIPs []net.IP, version int) (*CompiledPolicy, error) {
 	defaultVerdict, err := actionToVerdict(cfg.Defaults.Action)
 	if err != nil {
 		return nil, fmt.Errorf("defaults.action: %w", err)
@@ -43,6 +45,28 @@ func Compile(cfg *config.Config, resolvedIPs map[string][]net.IP, version int) (
 	policy := &CompiledPolicy{
 		DefaultVerdict: defaultVerdict,
 		Version:        version,
+	}
+
+	// Insert two catch-all entries (0.0.0.0/1 + 128.0.0.0/1) so the BPF
+	// LPM trie enforces the default verdict at the kernel level.  A single
+	// 0.0.0.0/0 (prefixlen=0) entry is not reliably matched by the kernel's
+	// LPM trie implementation, so we split the IPv4 space into two halves.
+	// More-specific per-rule entries always take precedence in the trie.
+	policy.Entries = append(policy.Entries,
+		LPMEntry{PrefixLen: 1, IP: 0, Verdict: defaultVerdict, RuleID: "_default"},                              // 0.0.0.0/1
+		LPMEntry{PrefixLen: 1, IP: binary.LittleEndian.Uint32(net.IP{128, 0, 0, 0}), Verdict: defaultVerdict, RuleID: "_default"}, // 128.0.0.0/1
+	)
+
+	// Inject synthetic allow entries for system DNS nameservers so child-
+	// process DNS resolution is not blocked by the default verdict.  These
+	// /32 entries override the /1 catch-all defaults but can still be
+	// overridden by user rules (same prefix length, written later).
+	for _, ip := range dnsServerIPs {
+		entry, err := ipToLPMEntry(ip, 32, VerdictAllow, "_dns-allow")
+		if err != nil {
+			continue // skip non-IPv4 silently
+		}
+		policy.Entries = append(policy.Entries, entry)
 	}
 
 	for _, rule := range cfg.Rules {

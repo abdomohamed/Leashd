@@ -16,12 +16,15 @@ import (
 	"github.com/abdotalema/leashd/internal/daemon"
 	ldns "github.com/abdotalema/leashd/internal/dns"
 	"github.com/abdotalema/leashd/internal/policy"
+	"github.com/abdotalema/leashd/internal/privdrop"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagRunCgroupName string
-	flagRunNoDaemon   bool
+	flagRunCgroupName  string
+	flagRunNoDaemon    bool
+	flagRunUser        string
+	flagRunNoDropPrivs bool
 )
 
 var runCmd = &cobra.Command{
@@ -38,6 +41,8 @@ Requires: root or CAP_BPF + CAP_NET_ADMIN + CAP_SYS_ADMIN.`,
 func init() {
 	runCmd.Flags().StringVar(&flagRunCgroupName, "cgroup-name", "", "Override cgroup name (default: leashd-<pid>)")
 	runCmd.Flags().BoolVar(&flagRunNoDaemon, "no-daemon", false, "Dry-run: start child without eBPF enforcement")
+	runCmd.Flags().StringVar(&flagRunUser, "user", "", "Drop to this user before running the command (default: auto-detect from SUDO_UID)")
+	runCmd.Flags().BoolVar(&flagRunNoDropPrivs, "no-drop-privs", false, "Keep child running as root (not recommended)")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -111,6 +116,16 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 		// Build DNS resolver + policy engine.
 		resolver := ldns.NewResolver(logger, nil)
+
+		// Discover system nameservers so DNS resolution is always permitted,
+		// even when defaults.action is "block".
+		dnsServerIPs := ldns.SystemNameservers()
+		if len(dnsServerIPs) > 0 {
+			logger.Info("auto-allowing system DNS nameservers", "nameservers", formatIPs(dnsServerIPs))
+		} else {
+			logger.Warn("no system DNS nameservers found in /etc/resolv.conf")
+		}
+
 		var domains []string
 		resolvedIPs := make(map[string][]net.IP)
 		for _, rule := range cfg.Rules {
@@ -129,7 +144,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		compiled, err := policy.Compile(cfg, resolvedIPs, 1)
+		compiled, err := policy.Compile(cfg, resolvedIPs, dnsServerIPs, 1)
 		if err != nil {
 			return fmt.Errorf("compile policy: %w", err)
 		}
@@ -146,7 +161,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		}
 		defer disp.Close()
 
-		dmn, err = daemon.New(rulesPath, dir, loader, resolver, engine, disp, mgr, logger)
+		dmn, err = daemon.New(rulesPath, dir, loader, resolver, engine, disp, mgr, dnsServerIPs, logger)
 		if err != nil {
 			return fmt.Errorf("create daemon: %w", err)
 		}
@@ -156,11 +171,29 @@ func runRun(cmd *cobra.Command, args []string) error {
 		defer dmn.Stop()
 	}
 
+	// Resolve privilege-drop credentials for the child process.
+	var dropResult *privdrop.Result
+	if !flagRunNoDropPrivs {
+		dropResult, err = privdrop.Resolve(flagRunUser)
+		if err != nil {
+			return fmt.Errorf("resolve user for privilege drop: %w", err)
+		}
+		if dropResult != nil {
+			logger.Info("child will drop privileges", "uid", dropResult.UID, "gid", dropResult.GID, "user", dropResult.Username)
+		} else {
+			logger.Warn("no privilege drop: could not detect invoking user (use --user to specify)")
+		}
+	}
+
 	// Fork the child into the cgroup.
 	child := exec.Command(args[0], args[1:]...)
 	child.Stdin = os.Stdin
 	child.Stdout = os.Stdout
 	child.Stderr = os.Stderr
+
+	if dropResult != nil {
+		child.Env = dropResult.Env(os.Environ())
+	}
 
 	cgroupFD, err := mgr.FD()
 	if err != nil {
@@ -170,17 +203,28 @@ func runRun(cmd *cobra.Command, args []string) error {
 		CgroupFD:    int(cgroupFD.Fd()),
 		UseCgroupFD: true,
 	}
+	if dropResult != nil {
+		child.SysProcAttr.Credential = dropResult.Credential
+	}
 
 	if err := child.Start(); err != nil {
 		_ = cgroupFD.Close()
-		// Fallback: write PID to cgroup.procs after start.
+		// Fallback: start without CgroupFD, place into cgroup after.
 		child.SysProcAttr = &syscall.SysProcAttr{}
+		if dropResult != nil {
+			child.SysProcAttr.Credential = dropResult.Credential
+		}
 		if err2 := child.Start(); err2 != nil {
 			return fmt.Errorf("start child process: %w", err2)
 		}
-		_ = mgr.AddPID(child.Process.Pid)
 	} else {
 		_ = cgroupFD.Close()
+	}
+
+	// Always write PID to cgroup.procs: CLONE_INTO_CGROUP may silently
+	// fail on some kernels (e.g. WSL2), leaving the child in the root cgroup.
+	if err := mgr.AddPID(child.Process.Pid); err != nil {
+		logger.Warn("failed to add child to cgroup (may already be placed)", "error", err)
 	}
 
 	logger.Info("child process started", "pid", child.Process.Pid, "cmd", args[0])
@@ -215,4 +259,12 @@ func preflight() error {
 		return fmt.Errorf("preflight: %w", err)
 	}
 	return nil
+}
+
+func formatIPs(ips []net.IP) []string {
+	ss := make([]string, len(ips))
+	for i, ip := range ips {
+		ss[i] = ip.String()
+	}
+	return ss
 }
