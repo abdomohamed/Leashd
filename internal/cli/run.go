@@ -85,6 +85,21 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	logger.Info("cgroup created", "path", mgr.Path(), "cgroup_id", cgroupID)
 
+	// Resolve privilege-drop credentials early so the dispatcher can chown
+	// the event log to the invoking user.
+	var dropResult *privdrop.Result
+	if !flagRunNoDropPrivs {
+		dropResult, err = privdrop.Resolve(flagRunUser)
+		if err != nil {
+			return fmt.Errorf("resolve user for privilege drop: %w", err)
+		}
+		if dropResult != nil {
+			logger.Info("child will drop privileges", "uid", dropResult.UID, "gid", dropResult.GID, "user", dropResult.Username)
+		} else {
+			logger.Warn("no privilege drop: could not detect invoking user (use --user to specify)")
+		}
+	}
+
 	var (
 		loader     *bpf.Loader
 		dmn        *daemon.Daemon
@@ -154,8 +169,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// Pass invoking user's UID/GID so the log file is readable without sudo.
+		logUID, logGID := -1, -1
+		if dropResult != nil {
+			logUID = int(dropResult.UID)
+			logGID = int(dropResult.GID)
+		}
+
 		engine := policy.NewEngine(cfg, compiled, resolver, logger)
-		disp, err := daemon.NewDispatcher(cfg.Notifications, dir, logger)
+		disp, err := daemon.NewDispatcher(cfg.Notifications, dir, logUID, logGID, logger)
 		if err != nil {
 			return fmt.Errorf("create dispatcher: %w", err)
 		}
@@ -169,20 +191,6 @@ func runRun(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("start daemon: %w", err)
 		}
 		defer dmn.Stop()
-	}
-
-	// Resolve privilege-drop credentials for the child process.
-	var dropResult *privdrop.Result
-	if !flagRunNoDropPrivs {
-		dropResult, err = privdrop.Resolve(flagRunUser)
-		if err != nil {
-			return fmt.Errorf("resolve user for privilege drop: %w", err)
-		}
-		if dropResult != nil {
-			logger.Info("child will drop privileges", "uid", dropResult.UID, "gid", dropResult.GID, "user", dropResult.Username)
-		} else {
-			logger.Warn("no privilege drop: could not detect invoking user (use --user to specify)")
-		}
 	}
 
 	// Fork the child into the cgroup.

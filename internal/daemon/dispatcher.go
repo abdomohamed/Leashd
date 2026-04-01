@@ -29,7 +29,9 @@ type Dispatcher struct {
 }
 
 // NewDispatcher creates a Dispatcher from the notifications config.
-func NewDispatcher(notif config.Notifications, projectDir string, logger *slog.Logger) (*Dispatcher, error) {
+// If uid and gid are non-negative, the log directory and file are chowned
+// to that user so the invoking (non-root) user can read them.
+func NewDispatcher(notif config.Notifications, projectDir string, uid, gid int, logger *slog.Logger) (*Dispatcher, error) {
 	var sinks []Sink
 
 	if notif.Terminal {
@@ -40,13 +42,25 @@ func NewDispatcher(notif config.Notifications, projectDir string, logger *slog.L
 	if logPath == "" {
 		logPath = config.DefaultLogPath(projectDir)
 	}
-	if err := os.MkdirAll(dirOf(logPath), 0700); err != nil {
+	logDir := dirOf(logPath)
+	if err := os.MkdirAll(logDir, 0700); err != nil {
 		return nil, fmt.Errorf("create log dir: %w", err)
 	}
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open event log %s: %w", logPath, err)
 	}
+
+	// Chown the log directory and file so the invoking user can read them.
+	if uid >= 0 && gid >= 0 {
+		if err := os.Chown(logDir, uid, gid); err != nil && logger != nil {
+			logger.Warn("failed to chown log directory", "path", logDir, "uid", uid, "gid", gid, "err", err)
+		}
+		if err := os.Chown(logPath, uid, gid); err != nil && logger != nil {
+			logger.Warn("failed to chown log file", "path", logPath, "uid", uid, "gid", gid, "err", err)
+		}
+	}
+
 	sinks = append(sinks, &JSONLogSink{file: f, enc: json.NewEncoder(f)})
 
 	if notif.Webhook != nil && notif.Webhook.URL != "" {
@@ -127,24 +141,24 @@ type JSONLogSink struct {
 
 // logEvent is the JSON representation written to the event log.
 type logEvent struct {
-	Timestamp  time.Time `json:"timestamp"`
-	PID        uint32    `json:"pid"`
-	Comm       string    `json:"comm"`
-	DstIP      string    `json:"dst_ip"`
-	DstPort    uint16    `json:"dst_port"`
-	Protocol   uint8     `json:"protocol"`
-	ReverseDNS string    `json:"reverse_dns,omitempty"`
-	MatchedRule string   `json:"matched_rule,omitempty"`
-	Verdict    string    `json:"verdict"`
-	Meta       logMeta   `json:"_meta"`
+	Timestamp   time.Time `json:"timestamp"`
+	PID         uint32    `json:"pid"`
+	Comm        string    `json:"comm"`
+	DstIP       string    `json:"dst_ip"`
+	DstPort     uint16    `json:"dst_port"`
+	Protocol    uint8     `json:"protocol"`
+	ReverseDNS  string    `json:"reverse_dns,omitempty"`
+	MatchedRule string    `json:"matched_rule,omitempty"`
+	Verdict     string    `json:"verdict"`
+	Meta        logMeta   `json:"_meta"`
 }
 
 type logMeta struct {
-	CgroupID      uint64 `json:"cgroup_id"`
-	CgroupPath    string `json:"cgroup_path"`
-	KernelVerdict string `json:"kernel_verdict"`
-	EngineOverride bool  `json:"engine_override"`
-	PolicyVersion int    `json:"policy_version"`
+	CgroupID       uint64 `json:"cgroup_id"`
+	CgroupPath     string `json:"cgroup_path"`
+	KernelVerdict  string `json:"kernel_verdict"`
+	EngineOverride bool   `json:"engine_override"`
+	PolicyVersion  int    `json:"policy_version"`
 }
 
 func (j *JSONLogSink) Write(_ context.Context, evt EnrichedEvent) error {
