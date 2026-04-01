@@ -36,7 +36,7 @@ fi
 
 # ── 0. System packages (clang, llvm, libbpf-dev, python3-venv) ───────────────
 
-APT_PACKAGES=(clang llvm libbpf-dev python3 python3-venv curl)
+APT_PACKAGES=(make clang llvm libbpf-dev python3 python3-venv curl)
 MISSING_APT=()
 for pkg in "${APT_PACKAGES[@]}"; do
     dpkg -s "$pkg" &>/dev/null || MISSING_APT+=("$pkg")
