@@ -1,0 +1,50 @@
+version: "1"
+
+project:
+  name: "litellm-supply-chain"
+  description: "Leashd rules for the LiteLLM supply-chain attack demo"
+
+defaults:
+  action: block
+  log: true
+
+rules:
+  # ── ALLOW rules ───────────────────────────────────────────────────────────
+
+  - id: loopback
+    comment: "Allow all loopback traffic"
+    cidrs: ["127.0.0.0/8"]
+    action: allow
+
+  - id: pypi
+    comment: "Python package index — needed for pip install during setup"
+    domains: ["pypi.org", "files.pythonhosted.org", "bootstrap.pypa.io"]
+    ports: [443, 80]
+    action: allow
+
+  - id: openai
+    comment: "OpenAI API — legitimate LLM usage"
+    domains: ["api.openai.com"]
+    ports: [443]
+    action: allow
+
+  - id: anthropic
+    comment: "Anthropic API — legitimate LLM usage"
+    domains: ["api.anthropic.com"]
+    ports: [443]
+    action: allow
+
+  # ── Everything else is BLOCKED by defaults.action: block ─────────────────
+  #
+  # The compromised LiteLLM versions 1.82.7 and 1.82.8 (March 2026) attempted
+  # to exfiltrate credentials, SSH keys, env vars, and cloud tokens to:
+  #
+  #   models.litellm.cloud  — primary C2 / data exfiltration endpoint
+  #   checkmarx.zone        — attacker-controlled drop server
+  #
+  # Neither domain appears in any allow rule above, so every connection attempt
+  # by the malicious payload is blocked by the default policy.
+
+notifications:
+  terminal: true
+  json_log: ".leashd/events.jsonl"
