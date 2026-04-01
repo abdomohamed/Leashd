@@ -5,6 +5,21 @@ All notable changes to Leashd will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.0] — Unreleased
+
+### Added
+
+- **Supply-chain attack demo**: LiteLLM scenario with a mock `litellm` package that simulates exfiltration behaviour, sample app, and matching `rules.yaml` to demonstrate Leashd blocking unexpected outbound connections.
+
+### Fixed
+
+- Chown event log (`.leashd/events.jsonl`) to the invoking user so it is readable without `sudo`.
+- HTTP error handling and C2 target structure in the supply-chain demo.
+- `run.sh` setup process: consistent venv creation, cleaner package installation checks.
+- `pyproject.toml` and requirements for local mock litellm installation.
+
+---
+
 ## [v0.1.0] — Unreleased
 
 Initial release of Leashd — a per-project eBPF network firewall for Linux.
@@ -29,4 +44,5 @@ Initial release of Leashd — a per-project eBPF network firewall for Linux.
 - cgroup v2 unified hierarchy
 - Root or `CAP_BPF` + `CAP_NET_ADMIN` + `CAP_SYS_ADMIN`
 
+[v0.2.0]: https://github.com/abdotalema/leashd/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/abdotalema/leashd/releases/tag/v0.1.0
