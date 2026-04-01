@@ -1,0 +1,3 @@
+# litellm 1.82.8 was pulled from PyPI after the March 2026 supply-chain incident.
+# The local mock at mock_packages/litellm/ is installed directly by run.sh.
+# See run.sh for the install command.
