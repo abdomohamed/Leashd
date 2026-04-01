@@ -101,10 +101,12 @@ fi
 
 # ── 3. Python venv + compromised litellm ────────────────────────────────────
 
-if [[ ! -d "$VENV_DIR" ]]; then
-    info "Creating Python venv at $VENV_DIR ..."
-    python3 -m venv "$VENV_DIR"
+if [[ -d "$VENV_DIR" ]]; then
+    info "Removing stale venv to ensure clean install..."
+    rm -rf "$VENV_DIR"
 fi
+info "Creating Python venv at $VENV_DIR ..."
+python3 -m venv "$VENV_DIR"
 
 info "Installing mock litellm 1.82.8 (local replica of compromised package)..."
 warn "This mock reproduces the .pth persistence + exfiltration POSTs of the real 1.82.8."
