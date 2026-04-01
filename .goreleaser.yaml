@@ -18,7 +18,7 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X github.com/abdotalema/leashd/internal/version.Version={{ .Version }}
+      - -X github.com/abdomohamed/leashd/internal/version.Version={{ .Version }}
 
 archives:
   - id: leashd-archive
@@ -36,7 +36,7 @@ checksum:
 
 release:
   github:
-    owner: abdotalema
+    owner: abdomohamed
     name: leashd
   draft: false
   prerelease: auto
@@ -57,9 +57,9 @@ release:
     leashd --version
     ```
 
-    See the [README](https://github.com/abdotalema/leashd#getting-started) for usage instructions.
+    See the [README](https://github.com/abdomohamed/leashd#getting-started) for usage instructions.
   footer: |
-    **Full Changelog**: https://github.com/abdotalema/leashd/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/abdomohamed/leashd/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 changelog:
   sort: asc
