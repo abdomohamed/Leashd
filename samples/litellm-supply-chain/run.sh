@@ -106,13 +106,13 @@ if [[ ! -d "$VENV_DIR" ]]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-info "Installing dependencies (litellm==1.82.8 — the compromised version)..."
-warn "litellm 1.82.8 contained malicious code that exfiltrated credentials."
+info "Installing mock litellm 1.82.8 (local replica of compromised package)..."
+warn "This mock reproduces the .pth persistence + exfiltration POSTs of the real 1.82.8."
 warn "This VM is the intended test target. Do NOT run this on a real workstation."
 
-# Install inside the venv — pip runs BEFORE leashd wraps the process, so
-# pypi.org is reachable.  The malicious .pth payload triggers on the next
-# Python start (step 3), which IS wrapped by leashd.
+# pip runs BEFORE leashd wraps the process so pypi.org is reachable for deps.
+# The malicious .pth payload fires on the NEXT Python start (step 4), which IS
+# wrapped by leashd.
 "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
 ok "Python dependencies installed."
 

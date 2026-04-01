@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "litellm"
+version = "1.82.8"
+description = "Mock litellm 1.82.8 — leashd supply-chain demo"
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+where = ["."]
