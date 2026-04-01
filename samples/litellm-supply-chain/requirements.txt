@@ -1,4 +1,3 @@
 # litellm 1.82.8 was pulled from PyPI after the March 2026 supply-chain incident.
-# We install a local mock that reproduces the malicious network behaviour
-# (exfiltration POSTs + .pth persistence) so the leashd demo is self-contained.
-./mock_packages/litellm
+# The local mock at mock_packages/litellm/ is installed directly by run.sh.
+# See run.sh for the install command.

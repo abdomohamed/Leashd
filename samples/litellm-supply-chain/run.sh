@@ -113,7 +113,7 @@ warn "This VM is the intended test target. Do NOT run this on a real workstation
 # pip runs BEFORE leashd wraps the process so pypi.org is reachable for deps.
 # The malicious .pth payload fires on the NEXT Python start (step 4), which IS
 # wrapped by leashd.
-"$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
+"$VENV_DIR/bin/pip" install --quiet "$SCRIPT_DIR/mock_packages/litellm"
 ok "Python dependencies installed."
 
 # ── 4. Run demo under leashd ────────────────────────────────────────────────
